@@ -35,6 +35,7 @@ export interface AppUser {
   role: Role;
   active: boolean;
   employee_id: string | null;
+  team_leader_id: string | null;
   created_at: string;
 }
 
@@ -59,6 +60,11 @@ export async function getCurrentRole(): Promise<Role | null> {
   const { data, error } = await supabase.from('profiles').select('role, active').eq('id', user.id).single();
   if (error || !data || data.active === false) return null;
   return data.role as Role;
+}
+
+export async function getCurrentUserId(): Promise<string | null> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  return sessionData.session?.user?.id ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +118,11 @@ export async function addProject(name: string) {
   if (error) throw error;
 }
 
+export async function updateProject(id: string, name: string) {
+  const { error } = await supabase.from('projects').update({ name }).eq('id', id);
+  if (error) throw error;
+}
+
 export async function deleteProject(id: string) {
   const { error } = await supabase.from('projects').delete().eq('id', id);
   if (error) throw error;
@@ -144,6 +155,11 @@ export async function addBuilding(projectId: string, name: string, departments: 
   }
 
   return data as Building;
+}
+
+export async function updateBuilding(id: string, name: string) {
+  const { error } = await supabase.from('buildings').update({ name }).eq('id', id);
+  if (error) throw error;
 }
 
 export async function deleteBuilding(id: string) {

@@ -1,4 +1,4 @@
-export type Role = 'employee' | 'manager';
+export type Role = 'employee' | 'manager' | 'team_leader';
 
 export interface Employee {
   id: string;
@@ -15,6 +15,7 @@ export interface TaskCategory {
 export interface Project {
   id: string;
   name: string;
+  created_by?: string | null;
 }
 
 export interface Building {

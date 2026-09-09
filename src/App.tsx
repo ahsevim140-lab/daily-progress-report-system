@@ -5,8 +5,9 @@ import { supabase } from './lib/supabase';
 import { AuthGate } from './components/AuthGate';
 import { ReportForm } from './components/ReportForm';
 import { ManagerDashboard } from './components/ManagerDashboard';
-import { FileText, ShieldCheck, LogOut } from 'lucide-react';
-import { getCurrentRole, signOut } from './services/supabaseService';
+import { TeamLeaderDashboard } from './components/TeamLeaderDashboard';
+import { FileText, ShieldCheck, LogOut, Users } from 'lucide-react';
+import { getCurrentRole, getCurrentUserId, signOut } from './services/supabaseService';
 
 const EMPTY_DATA: BackendData = {
   projects: [],
@@ -21,7 +22,8 @@ export default function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
   const [role, setRole] = useState<Role | null>(null);
-  const [activeTab, setActiveTab] = useState<'form' | 'manager'>('form');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'form' | 'dashboard'>('form');
 
   const [backendData, setBackendData] = useState<BackendData>(EMPTY_DATA);
   const [dataLoading, setDataLoading] = useState(false);
@@ -32,11 +34,13 @@ export default function App() {
     if (!currentRole) {
       await signOut();
       setRole(null);
+      setCurrentUserId(null);
       setAuthenticated(false);
       setBackendData(EMPTY_DATA);
       return;
     }
     setRole(currentRole);
+    setCurrentUserId(await getCurrentUserId());
     setAuthenticated(true);
 
     setDataLoading(true);
@@ -66,6 +70,7 @@ export default function App() {
     await signOut();
     setAuthenticated(false);
     setRole(null);
+    setCurrentUserId(null);
     setBackendData(EMPTY_DATA);
     setActiveTab('form');
   };
@@ -97,7 +102,7 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-3">
-                {role === 'manager' && (
+                {(role === 'manager' || role === 'team_leader') && (
                   <div className="flex items-center gap-2 bg-[#2C2A22]/50 p-1.5 rounded-xl border border-[#B89B5E]/30 shadow-inner">
                     <button
                       onClick={() => setActiveTab('form')}
@@ -109,13 +114,13 @@ export default function App() {
                       <span>نموذج التقرير</span>
                     </button>
                     <button
-                      onClick={() => setActiveTab('manager')}
+                      onClick={() => setActiveTab('dashboard')}
                       className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
-                        activeTab === 'manager' ? 'bg-[#B89B5E] text-[#2C2A22] font-bold' : 'text-[#F2EEDD] hover:bg-white/10'
+                        activeTab === 'dashboard' ? 'bg-[#B89B5E] text-[#2C2A22] font-bold' : 'text-[#F2EEDD] hover:bg-white/10'
                       }`}
                     >
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>لوحة المدير</span>
+                      {role === 'manager' ? <ShieldCheck className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                      <span>{role === 'manager' ? 'لوحة المدير' : 'لوحة قائد الفريق'}</span>
                     </button>
                   </div>
                 )}
@@ -143,12 +148,14 @@ export default function App() {
             )}
             {dataLoading && backendData.projects.length === 0 ? (
               <div className="text-center text-xs text-stone-500 py-16">جارٍ تحميل البيانات...</div>
-            ) : activeTab === 'form' || role !== 'manager' ? (
+            ) : activeTab === 'form' || role === 'employee' || !role ? (
               <div className="max-w-3xl mx-auto">
                 <ReportForm backendData={backendData} />
               </div>
-            ) : (
+            ) : role === 'manager' ? (
               <ManagerDashboard backendData={backendData} onRefreshData={loadEverything} />
+            ) : (
+              <TeamLeaderDashboard backendData={backendData} currentUserId={currentUserId} onRefreshData={loadEverything} />
             )}
           </main>
 
