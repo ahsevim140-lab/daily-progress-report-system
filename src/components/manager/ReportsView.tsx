@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackendData, ReportBatch } from '../../types';
 import { fetchReportBatches } from '../../services/supabaseService';
-import { formatArabicDate, toLocalYMD, exportBatchesToCSV } from '../../utils';
+import { formatArabicDate, toLocalYMD, exportBatchesToCSV, exportBatchesToPDF } from '../../utils';
+import logoUrl from '../../assets/logo.png';
 import {
   RefreshCw,
   Search,
   Download,
+  FileDown,
   ChevronDown,
   ChevronUp,
   AlertTriangle,
@@ -80,6 +82,23 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
       ? 'bg-amber-50 border-amber-200'
       : 'bg-white border-[#DED2AC]';
 
+  const handleExportPDF = async () => {
+    let logoDataUrl = '';
+    try {
+      const res = await fetch(logoUrl);
+      const blob = await res.blob();
+      logoDataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      // fall back to no logo if it can't be loaded
+    }
+    exportBatchesToPDF(filtered, logoDataUrl);
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-3">
@@ -126,6 +145,14 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
         >
           <Download className="w-3.5 h-3.5" />
           تصدير CSV
+        </button>
+
+        <button
+          onClick={handleExportPDF}
+          className="px-3 py-1.5 bg-white border border-[#DED2AC] text-[#3B4636] rounded-lg text-xs font-medium flex items-center gap-1.5"
+        >
+          <FileDown className="w-3.5 h-3.5" />
+          تصدير PDF
         </button>
       </div>
 

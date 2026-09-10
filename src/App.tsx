@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { BackendData, Role } from './types';
 import { fetchBackendData } from './services/supabaseService';
 import { supabase } from './lib/supabase';
+import logoUrl from './assets/logo.png';
 import { AuthGate } from './components/AuthGate';
 import { ReportForm } from './components/ReportForm';
 import { ManagerDashboard } from './components/ManagerDashboard';
@@ -88,8 +89,8 @@ export default function App() {
           <header className="relative bg-[#3B4636] text-[#F2EEDD] px-6 py-6 border-b border-[#B89B5E]/30 shadow-md">
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-4 text-center md:text-right">
-                <div className="w-12 h-12 rounded-xl bg-[#B89B5E]/20 border border-[#B89B5E]/50 flex items-center justify-center text-[#D8C48F] shrink-0">
-                  <FileText className="w-6 h-6 text-[#D8C48F]" />
+                <div className="w-12 h-12 shrink-0 flex items-center justify-center">
+                  <img src={logoUrl} alt="شعار" className="w-11 h-11 object-contain" />
                 </div>
                 <div>
                   <h1 className="font-serif text-2xl font-bold tracking-tight text-[#EFE8D6]">

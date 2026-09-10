@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { KeyRound, Check, AlertCircle } from 'lucide-react';
+import { Check, AlertCircle } from 'lucide-react';
 import { signIn } from '../services/supabaseService';
+import logoUrl from '../assets/logo.png';
 
 interface AuthGateProps {
   onAuthenticated: () => void;
@@ -31,8 +32,8 @@ export const AuthGate: React.FC<AuthGateProps> = ({ onAuthenticated }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/65 backdrop-blur-sm p-4">
       <div className="w-full max-w-md bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl shadow-2xl overflow-hidden text-stone-800">
         <div className="bg-[#3B4636] px-6 py-5 text-white flex items-center gap-3 border-b border-[#B89B5E]/30">
-          <div className="p-2 bg-[#B89B5E]/20 rounded-xl border border-[#B89B5E]/40 text-[#D8C48F]">
-            <KeyRound className="w-5 h-5" />
+          <div className="p-1.5 bg-[#B89B5E]/20 rounded-xl border border-[#B89B5E]/40 flex items-center justify-center">
+            <img src={logoUrl} alt="شعار" className="w-7 h-7 object-contain" />
           </div>
           <div>
             <h3 className="font-serif text-lg font-semibold text-[#EFE8D6]">تسجيل الدخول</h3>
