@@ -211,6 +211,31 @@ export async function overrideProjectTaskCompletion(id: string, completionPercen
   if (error) throw error;
 }
 
+// Add a custom progress measure (e.g. "As-Built") to a building, beyond the
+// standard department rows. Starts at 0% complete with the given weight —
+// the manager is responsible for rebalancing other weights to keep the
+// building's total at 100%.
+export async function addProjectTaskMeasure(
+  projectId: string,
+  buildingId: string,
+  name: string,
+  weightPercent: number
+) {
+  const { error } = await supabase.from('project_tasks').insert({
+    project_id: projectId,
+    building_id: buildingId,
+    department: name,
+    weight_percent: weightPercent,
+    completion_percent: 0,
+  });
+  if (error) throw error;
+}
+
+export async function deleteProjectTaskMeasure(id: string) {
+  const { error } = await supabase.from('project_tasks').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Reports
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BackendData } from '../../types';
-import { setProjectTaskWeight, overrideProjectTaskCompletion } from '../../services/supabaseService';
-import { AlertTriangle, Save } from 'lucide-react';
+import { setProjectTaskWeight, overrideProjectTaskCompletion, addProjectTaskMeasure, deleteProjectTaskMeasure } from '../../services/supabaseService';
+import { AlertTriangle, Save, Plus, Trash2 } from 'lucide-react';
 
 interface ProgressViewProps {
   backendData: BackendData;
@@ -27,6 +27,33 @@ const ProgressBar: React.FC<{ value: number; tone?: 'ok' | 'warn' }> = ({ value,
 export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefreshData }) => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [newMeasure, setNewMeasure] = useState<Record<string, { name: string; weight: string }>>({});
+  const [busyBuildingId, setBusyBuildingId] = useState<string | null>(null);
+
+  const handleAddMeasure = async (projectId: string, buildingId: string) => {
+    const draft = newMeasure[buildingId];
+    const name = draft?.name?.trim();
+    const weight = Number(draft?.weight);
+    if (!name || Number.isNaN(weight) || weight < 0 || weight > 100) return;
+    setBusyBuildingId(buildingId);
+    try {
+      await addProjectTaskMeasure(projectId, buildingId, name, weight);
+      setNewMeasure((m) => ({ ...m, [buildingId]: { name: '', weight: '' } }));
+      onRefreshData();
+    } finally {
+      setBusyBuildingId(null);
+    }
+  };
+
+  const handleDeleteMeasure = async (buildingId: string, id: string) => {
+    setBusyBuildingId(buildingId);
+    try {
+      await deleteProjectTaskMeasure(id);
+      onRefreshData();
+    } finally {
+      setBusyBuildingId(null);
+    }
+  };
 
   const handleWeightSave = async (id: string, value: string) => {
     const num = Number(value);
@@ -104,7 +131,18 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                           <div key={row.id} className="bg-white border border-[#DED2AC] rounded-lg p-2.5 space-y-1.5">
                             <div className="flex items-center justify-between text-[11px] font-semibold text-stone-800">
                               <span>{row.department}</span>
-                              <span className="font-mono text-stone-500">حالياً {row.completion_percent}%</span>
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono text-stone-500">حالياً {row.completion_percent}%</span>
+                                <button
+                                  type="button"
+                                  disabled={busyBuildingId === building.id}
+                                  onClick={() => handleDeleteMeasure(building.id, row.id)}
+                                  className="text-stone-400 hover:text-red-600 disabled:opacity-30"
+                                  title="حذف هذا القياس"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <label className="text-[10px] text-stone-500 w-10 shrink-0">الوزن</label>
@@ -149,6 +187,37 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                           </div>
                         );
                       })}
+                    </div>
+
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-[#DED2AC] mt-1">
+                      <input
+                        type="text"
+                        placeholder="اسم قياس جديد (مثال: كما هو منفذ)"
+                        value={newMeasure[building.id]?.name ?? ''}
+                        onChange={(e) =>
+                          setNewMeasure((m) => ({ ...m, [building.id]: { name: e.target.value, weight: m[building.id]?.weight ?? '' } }))
+                        }
+                        className="flex-1 border border-[#DED2AC] rounded px-2 py-1.5 text-[11px] bg-white"
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        placeholder="الوزن"
+                        value={newMeasure[building.id]?.weight ?? ''}
+                        onChange={(e) =>
+                          setNewMeasure((m) => ({ ...m, [building.id]: { name: m[building.id]?.name ?? '', weight: e.target.value } }))
+                        }
+                        className="w-16 border border-[#DED2AC] rounded px-1.5 py-1.5 text-[11px] bg-white"
+                      />
+                      <button
+                        type="button"
+                        disabled={busyBuildingId === building.id || !newMeasure[building.id]?.name || !newMeasure[building.id]?.weight}
+                        onClick={() => handleAddMeasure(project.id, building.id)}
+                        className="px-2 py-1.5 bg-[#3B4636] text-[#F2EEDD] rounded text-[11px] flex items-center gap-1 disabled:opacity-40"
+                      >
+                        <Plus className="w-3 h-3" /> إضافة قياس
+                      </button>
                     </div>
                   </div>
                 );
