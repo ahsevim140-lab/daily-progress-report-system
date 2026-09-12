@@ -37,6 +37,7 @@ export interface AppUser {
   active: boolean;
   employee_id: string | null;
   team_leader_id: string | null;
+  department: string | null;
   created_at: string;
 }
 
@@ -194,6 +195,12 @@ export async function deleteTaskSub(category: TaskCategory, sub: string) {
   }
 }
 
+// Empty array = visible to every department. Non-empty = only those departments.
+export async function updateTaskCategoryVisibility(id: string, departments: string[]) {
+  const { error } = await supabase.from('task_categories').update({ visible_departments: departments }).eq('id', id);
+  if (error) throw error;
+}
+
 // Manager-set weight override for one project+building+department row.
 // Does NOT touch completion_percent (that only moves via submitted reports
 // or the explicit override function below).
@@ -328,4 +335,51 @@ export async function saveAttendanceForDate(date: string, records: { employee_id
     const { error: insertError } = await supabase.from('attendance').insert(rows);
     if (insertError) throw insertError;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Employee <-> project assignments
+// ---------------------------------------------------------------------------
+export interface AssignmentRow {
+  id: string;
+  employee_id: string;
+  project_id: string;
+}
+
+export async function fetchAssignments(): Promise<AssignmentRow[]> {
+  const { data, error } = await supabase.from('employee_project_assignments').select('id, employee_id, project_id');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function assignEmployeeToProject(employeeId: string, projectId: string) {
+  const { error } = await supabase.from('employee_project_assignments').insert({ employee_id: employeeId, project_id: projectId });
+  if (error) throw error;
+}
+
+export async function unassignEmployeeFromProject(id: string) {
+  const { error } = await supabase.from('employee_project_assignments').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// For the logged-in employee: resolve their own employee_id (via their
+// profile), then the list of projects a manager has assigned them to.
+export async function fetchMyAssignedProjectIds(): Promise<string[]> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData.session?.user?.id;
+  if (!userId) return [];
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('employee_id')
+    .eq('id', userId)
+    .maybeSingle();
+  if (profileError || !profile?.employee_id) return [];
+
+  const { data, error } = await supabase
+    .from('employee_project_assignments')
+    .select('project_id')
+    .eq('employee_id', profile.employee_id);
+  if (error) throw error;
+  return (data || []).map((r) => r.project_id);
 }

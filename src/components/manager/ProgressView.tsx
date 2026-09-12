@@ -7,6 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 interface ProgressViewProps {
   backendData: BackendData;
   onRefreshData: () => void;
+  readOnly?: boolean;
 }
 
 function weightedCompletion(rows: { weight_percent: number; completion_percent: number }[]): number {
@@ -25,7 +26,7 @@ const ProgressBar: React.FC<{ value: number; tone?: 'ok' | 'warn' }> = ({ value,
   </div>
 );
 
-export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefreshData }) => {
+export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefreshData, readOnly = false }) => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [newMeasure, setNewMeasure] = useState<Record<string, { name: string; weight: string }>>({});
@@ -189,17 +190,20 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                               <span>{row.department}</span>
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-stone-500">حالياً {row.completion_percent}%</span>
-                                <button
-                                  type="button"
-                                  disabled={busyBuildingId === building.id}
-                                  onClick={() => handleDeleteMeasure(building.id, row.id)}
-                                  className="text-stone-400 hover:text-red-600 disabled:opacity-30"
-                                  title="حذف هذا القياس"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                                {!readOnly && (
+                                  <button
+                                    type="button"
+                                    disabled={busyBuildingId === building.id}
+                                    onClick={() => handleDeleteMeasure(building.id, row.id)}
+                                    className="text-stone-400 hover:text-red-600 disabled:opacity-30"
+                                    title="حذف هذا القياس"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
                               </div>
                             </div>
+                            {!readOnly && (
                             <div className="flex items-center gap-1.5">
                               <label className="text-[10px] text-stone-500 w-10 shrink-0">الوزن</label>
                               <input
@@ -220,6 +224,8 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                                 <Save className="w-3.5 h-3.5" />
                               </button>
                             </div>
+                            )}
+                            {!readOnly && (
                             <div className="flex items-center gap-1.5">
                               <label className="text-[10px] text-stone-500 w-10 shrink-0">تعديل</label>
                               <input
@@ -240,11 +246,13 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                                 <Save className="w-3.5 h-3.5" />
                               </button>
                             </div>
+                            )}
                           </div>
                         );
                       })}
                     </div>
 
+                    {!readOnly && (
                     <div className="flex items-center gap-1.5 pt-1 border-t border-[#DED2AC] mt-1">
                       <input
                         type="text"
@@ -275,6 +283,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                         <Plus className="w-3 h-3" /> إضافة قياس
                       </button>
                     </div>
+                    )}
                   </div>
                 );
               })}

@@ -3,6 +3,7 @@ import { BackendData, ReportBatch } from '../../types';
 import { fetchReportBatches } from '../../services/supabaseService';
 import { formatArabicDate, toLocalYMD, exportBatchesToCSV, exportBatchesToPDF } from '../../utils';
 import logoUrl from '../../assets/logo.png';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import {
   RefreshCw,
   Search,
@@ -13,6 +14,7 @@ import {
   AlertTriangle,
   TrendingDown,
   Minus,
+  Hourglass,
 } from 'lucide-react';
 
 interface ReportsViewProps {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BackendData } from '../../types';
-import { addTaskSub, deleteTaskSub } from '../../services/supabaseService';
+import { addTaskSub, deleteTaskSub, updateTaskCategoryVisibility } from '../../services/supabaseService';
 import { Plus, ListTodo, Trash2 } from 'lucide-react';
 
 interface TaskCategoriesViewProps {
@@ -30,6 +30,13 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
     } finally {
       setSaving(false);
     }
+  };
+
+  const toggleDept = (catId: string, current: string[], dept: string) => {
+    const next = current.includes(dept) ? current.filter((d) => d !== dept) : [...current, dept];
+    withSaving(async () => {
+      await updateTaskCategoryVisibility(catId, next);
+    }, 'تم تحديث الأقسام التي تشاهد هذا التصنيف.');
   };
 
   return (
@@ -69,7 +76,7 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
         </form>
         <div className="space-y-3">
           {backendData.taskCategories.map((cat) => (
-            <div key={cat.id} className="bg-[#F3EDDD] border border-[#DED2AC] p-4 rounded-xl space-y-2">
+            <div key={cat.id} className="bg-[#F3EDDD] border border-[#DED2AC] p-4 rounded-xl space-y-3">
               <div className="text-xs font-bold text-[#3B4636]">{cat.main}</div>
               <div className="flex flex-wrap gap-1.5">
                 {cat.subs.map((sub) => (
@@ -84,6 +91,27 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
                   </span>
                 ))}
               </div>
+              <div className="border-t border-[#DED2AC] pt-2.5">
+                <div className="text-[10px] text-stone-500 mb-1.5">
+                  يظهر هذا التصنيف لـ:{' '}
+                  <span className="font-semibold">
+                    {cat.visible_departments.length === 0 ? 'جميع الأقسام' : cat.visible_departments.join('، ')}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {backendData.departments.map((dept) => (
+                    <label key={dept} className="inline-flex items-center gap-1.5 text-[11px] bg-white border border-[#DED2AC] rounded-lg px-2 py-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cat.visible_departments.includes(dept)}
+                        onChange={() => toggleDept(cat.id, cat.visible_departments, dept)}
+                        disabled={saving}
+                      />
+                      {dept}
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -91,3 +119,4 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
     </div>
   );
 };
+

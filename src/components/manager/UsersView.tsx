@@ -21,6 +21,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
   const [newUserRole, setNewUserRole] = useState<Role>('employee');
   const [newUserEmployeeId, setNewUserEmployeeId] = useState('');
   const [newUserTeamLeaderId, setNewUserTeamLeaderId] = useState('');
+  const [newUserDepartment, setNewUserDepartment] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -44,6 +45,12 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
 
   const teamLeaders = users.filter((u) => u.role === 'team_leader');
 
+  const handleEmployeeLinkChange = (employeeId: string) => {
+    setNewUserEmployeeId(employeeId);
+    const emp = backendData.employees.find((e) => e.id === employeeId);
+    if (emp && !newUserDepartment) setNewUserDepartment(emp.department);
+  };
+
   const createUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUsername.trim() || !newPassword || !newUserDisplayName.trim()) return;
@@ -56,6 +63,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
         role: newUserRole,
         employee_id: newUserEmployeeId || null,
         team_leader_id: newUserRole === 'employee' ? newUserTeamLeaderId || null : null,
+        department: newUserDepartment || null,
       });
       setNewUsername('');
       setNewPassword('');
@@ -63,6 +71,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
       setNewUserRole('employee');
       setNewUserEmployeeId('');
       setNewUserTeamLeaderId('');
+      setNewUserDepartment('');
       notify('تم إنشاء المستخدم بنجاح.');
       await loadUsers();
     } catch (err: any) {
@@ -82,6 +91,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
         active: user.active,
         employee_id: user.employee_id,
         team_leader_id: user.team_leader_id,
+        department: user.department,
         ...changes,
       });
       notify(message);
@@ -115,9 +125,13 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
             <option value="team_leader">قائد فريق</option>
             <option value="manager">مدير</option>
           </select>
-          <select value={newUserEmployeeId} onChange={(e) => setNewUserEmployeeId(e.target.value)} className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs">
+          <select value={newUserEmployeeId} onChange={(e) => handleEmployeeLinkChange(e.target.value)} className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs">
             <option value="">ربط بموظف...</option>
             {backendData.employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name} — {emp.department}</option>)}
+          </select>
+          <select value={newUserDepartment} onChange={(e) => setNewUserDepartment(e.target.value)} className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs">
+            <option value="">بدون قسم</option>
+            {backendData.departments.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
 
           {newUserRole === 'employee' && (
@@ -144,12 +158,22 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
                 </div>
                 <div className="text-[11px] text-stone-500 mt-0.5">
                   @{user.username} · {roleLabel[user.role]}
+                  {user.department && <> · {user.department}</>}
                   {user.role === 'employee' && user.team_leader_id && (
                     <> · فريق: {teamLeaders.find((tl) => tl.id === user.team_leader_id)?.display_name || '—'}</>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  disabled={saving}
+                  value={user.department || ''}
+                  onChange={(e) => updateUser(user, { department: e.target.value || null }, 'تم تحديث القسم.')}
+                  className="px-2 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 bg-white disabled:opacity-50"
+                >
+                  <option value="">بدون قسم</option>
+                  {backendData.departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
                 {user.role === 'employee' && (
                   <select
                     disabled={saving}

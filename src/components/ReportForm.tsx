@@ -22,7 +22,6 @@ interface ReportFormProps {
   backendData: BackendData;
 }
 
-const ALWAYS_CATEGORIES = ['اجتماع', 'وضع راهن', 'تدقيق', 'عام', 'تدريب', 'أخرى'];
 const PERCENT_OPTIONS = ['100', '90', '80', '70', '60', '50', '40', '30', '20', '10', '0'];
 
 function emptyLine(): DraftReportLine {
@@ -35,6 +34,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
   const [projectId, setProjectId] = useState('');
   const [buildingId, setBuildingId] = useState('');
   const [lines, setLines] = useState<DraftReportLine[]>([emptyLine()]);
+  // Main-category selection per line is a UI-only concern (only the final
+  // sub-task gets submitted), so it's tracked separately from DraftReportLine.
+  const [lineCategory, setLineCategory] = useState<Record<string, string>>({});
 
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ type: 'ok' | 'err' | 'info'; message: string } | null>(null);
@@ -45,12 +47,19 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
 
   const buildingsForProject = backendData.buildings.filter((b) => b.project_id === projectId);
 
-  const getTaskOptions = (department: string) => {
+  // A category with an empty visible_departments list is shown to everyone;
+  // otherwise only to the departments a manager picked for it.
+  const getVisibleCategories = (department: string) => {
     if (!department) return backendData.taskCategories;
     const matched = backendData.taskCategories.filter(
-      (cat) => cat.main === department || ALWAYS_CATEGORIES.includes(cat.main)
+      (cat) => cat.visible_departments.length === 0 || cat.visible_departments.includes(department)
     );
     return matched.length > 0 ? matched : backendData.taskCategories;
+  };
+
+  const getTasksForCategory = (department: string, mainCategory: string) => {
+    const group = getVisibleCategories(department).find((c) => c.main === mainCategory);
+    return group ? group.subs : [];
   };
 
   // current tracked completion for a given department, in the chosen project+building
@@ -66,9 +75,22 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
   const handleRemoveLine = (id: string) => {
     if (lines.length <= 1) return;
     setLines(lines.filter((l) => l.id !== id));
+    setLineCategory((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
   const handleLineChange = (id: string, field: keyof DraftReportLine, value: string) => {
     setLines(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
+  };
+  const handleLineDeptChange = (id: string, department: string) => {
+    setLines(lines.map((l) => (l.id === id ? { ...l, department, task: '' } : l)));
+    setLineCategory((prev) => ({ ...prev, [id]: '' }));
+  };
+  const handleLineCategoryChange = (id: string, category: string) => {
+    setLineCategory((prev) => ({ ...prev, [id]: category }));
+    setLines(lines.map((l) => (l.id === id ? { ...l, task: '' } : l)));
   };
 
   const lineStatus = (line: DraftReportLine): 'up' | 'stalled' | 'regressed' | null => {
@@ -240,7 +262,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div>
                       <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
                         <Layers className="w-3.5 h-3.5 text-[#B89B5E]" />
@@ -248,7 +270,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                       </label>
                       <select
                         value={line.department}
-                        onChange={(e) => handleLineChange(line.id, 'department', e.target.value)}
+                        onChange={(e) => handleLineDeptChange(line.id, e.target.value)}
                         className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
                         required
                       >
@@ -262,21 +284,36 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                     <div>
                       <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
                         <FileText className="w-3.5 h-3.5 text-[#B89B5E]" />
-                        المهمة الفرعية
+                        التصنيف الرئيسي
+                      </label>
+                      <select
+                        value={lineCategory[line.id] || ''}
+                        onChange={(e) => handleLineCategoryChange(line.id, e.target.value)}
+                        className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
+                        required
+                      >
+                        <option value="">اختر التصنيف...</option>
+                        {getVisibleCategories(line.department).map((group) => (
+                          <option key={group.id} value={group.main}>{group.main}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
+                        <FileText className="w-3.5 h-3.5 text-[#B89B5E]" />
+                        المهمة
                       </label>
                       <select
                         value={line.task}
                         onChange={(e) => handleLineChange(line.id, 'task', e.target.value)}
                         className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
                         required
+                        disabled={!lineCategory[line.id]}
                       >
-                        <option value="">اختر المهمة...</option>
-                        {getTaskOptions(line.department).map((group) => (
-                          <optgroup key={group.id} label={group.main}>
-                            {group.subs.map((sub) => (
-                              <option key={sub} value={sub}>{sub}</option>
-                            ))}
-                          </optgroup>
+                        <option value="">{lineCategory[line.id] ? 'اختر المهمة...' : 'اختر التصنيف أولاً...'}</option>
+                        {getTasksForCategory(line.department, lineCategory[line.id] || '').map((sub) => (
+                          <option key={sub} value={sub}>{sub}</option>
                         ))}
                       </select>
                     </div>

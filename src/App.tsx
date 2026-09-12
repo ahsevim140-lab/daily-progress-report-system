@@ -7,6 +7,7 @@ import { AuthGate } from './components/AuthGate';
 import { ReportForm } from './components/ReportForm';
 import { ManagerDashboard } from './components/ManagerDashboard';
 import { TeamLeaderDashboard } from './components/TeamLeaderDashboard';
+import { EmployeeDashboard } from './components/EmployeeDashboard';
 import { FileText, ShieldCheck, LogOut, Users } from 'lucide-react';
 import { getCurrentRole, getCurrentUserId, signOut } from './services/supabaseService';
 
@@ -106,7 +107,7 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-3">
-                {(role === 'manager' || role === 'team_leader') && (
+                {(role === 'manager' || role === 'team_leader' || role === 'employee') && (
                   <div className="flex items-center gap-2 bg-[#2C2A22]/50 p-1.5 rounded-xl border border-[#B89B5E]/30 shadow-inner">
                     <button
                       onClick={() => setActiveTab('form')}
@@ -124,7 +125,7 @@ export default function App() {
                       }`}
                     >
                       {role === 'manager' ? <ShieldCheck className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                      <span>{role === 'manager' ? 'لوحة المدير' : 'لوحة قائد الفريق'}</span>
+                      <span>{role === 'manager' ? 'لوحة المدير' : role === 'team_leader' ? 'لوحة قائد الفريق' : 'مشاريعي'}</span>
                     </button>
                   </div>
                 )}
@@ -152,14 +153,16 @@ export default function App() {
             )}
             {dataLoading && backendData.projects.length === 0 ? (
               <div className="text-center text-xs text-stone-500 py-16">جارٍ تحميل البيانات...</div>
-            ) : activeTab === 'form' || role === 'employee' || !role ? (
+            ) : activeTab === 'form' || !role ? (
               <div className="max-w-3xl mx-auto">
                 <ReportForm backendData={backendData} />
               </div>
             ) : role === 'manager' ? (
               <ManagerDashboard backendData={backendData} onRefreshData={loadEverything} />
-            ) : (
+            ) : role === 'team_leader' ? (
               <TeamLeaderDashboard backendData={backendData} currentUserId={currentUserId} onRefreshData={loadEverything} />
+            ) : (
+              <EmployeeDashboard backendData={backendData} onRefreshData={loadEverything} />
             )}
           </main>
 

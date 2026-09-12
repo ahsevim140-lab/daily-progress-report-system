@@ -10,6 +10,13 @@ export interface TaskCategory {
   id: string;
   main: string;
   subs: string[];
+  visible_departments: string[];
+}
+
+export interface EmployeeProjectAssignment {
+  id: string;
+  employee_id: string;
+  project_id: string;
 }
 
 export interface Project {
