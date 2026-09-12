@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { BackendData } from '../../types';
 import { setProjectTaskWeight, overrideProjectTaskCompletion, addProjectTaskMeasure, deleteProjectTaskMeasure } from '../../services/supabaseService';
-import { AlertTriangle, Save, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash2, Search, BarChart3 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface ProgressViewProps {
   backendData: BackendData;
@@ -29,6 +30,29 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [newMeasure, setNewMeasure] = useState<Record<string, { name: string; weight: string }>>({});
   const [busyBuildingId, setBusyBuildingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+
+  const projectsWithBuildings = backendData.projects.filter(
+    (p) => backendData.buildings.filter((b) => b.project_id === p.id).length > 0
+  );
+
+  const chartData = useMemo(() => {
+    return projectsWithBuildings.map((project) => {
+      const buildings = backendData.buildings.filter((b) => b.project_id === project.id);
+      const allProjectTasks = backendData.projectTasks.filter((t) => t.project_id === project.id);
+      const buildingCompletions = buildings.map((b) =>
+        weightedCompletion(allProjectTasks.filter((t) => t.building_id === b.id))
+      );
+      const pct = buildingCompletions.length
+        ? Math.round((buildingCompletions.reduce((s, v) => s + v, 0) / buildingCompletions.length) * 10) / 10
+        : 0;
+      return { name: project.name.length > 18 ? project.name.slice(0, 18) + '…' : project.name, fullName: project.name, pct };
+    });
+  }, [projectsWithBuildings, backendData.buildings, backendData.projectTasks]);
+
+  const filteredProjects = search.trim()
+    ? projectsWithBuildings.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : projectsWithBuildings;
 
   const handleAddMeasure = async (projectId: string, buildingId: string) => {
     const draft = newMeasure[buildingId];
@@ -81,7 +105,39 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
 
   return (
     <div className="space-y-6">
-      {backendData.projects.map((project) => {
+      {chartData.length > 1 && (
+        <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-xs font-bold text-[#3B4636] uppercase tracking-wider mb-3">
+            <BarChart3 className="w-4 h-4 text-[#B89B5E]" />
+            نسبة الإنجاز حسب المشروع
+          </div>
+          <ResponsiveContainer width="100%" height={Math.max(220, chartData.length * 32)}>
+            <BarChart data={chartData} layout="vertical" margin={{ left: 10, right: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+              <XAxis type="number" domain={[0, 100]} tickFormatter={(v) => `${v}%`} fontSize={11} />
+              <YAxis type="category" dataKey="name" width={150} fontSize={11} />
+              <Tooltip
+                formatter={(value: number) => [`${value}%`, 'الإنجاز']}
+                labelFormatter={(_, payload) => (payload && payload[0] ? (payload[0].payload as any).fullName : '')}
+              />
+              <Bar dataKey="pct" fill="#3B4636" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="relative max-w-sm">
+        <Search className="w-4 h-4 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2" />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="ابحث عن مشروع..."
+          className="w-full bg-white border border-[#DED2AC] rounded-xl pr-9 pl-3 py-2 text-xs"
+        />
+      </div>
+
+      {filteredProjects.map((project) => {
         const buildings = backendData.buildings.filter((b) => b.project_id === project.id);
         if (buildings.length === 0) return null;
 
@@ -227,9 +283,9 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
         );
       })}
 
-      {backendData.projects.every((p) => backendData.buildings.filter((b) => b.project_id === p.id).length === 0) && (
+      {filteredProjects.every((p) => backendData.buildings.filter((b) => b.project_id === p.id).length === 0) && (
         <div className="text-center text-xs text-stone-500 py-10">
-          لا توجد مبانٍ مضافة بعد. أضف مبنى من تبويب "إدارة القوائم" لبدء تتبع نسب الإنجاز.
+          {search ? 'لا توجد مشاريع مطابقة للبحث.' : 'لا توجد مبانٍ مضافة بعد. أضف مبنى من تبويب "المباني" لبدء تتبع نسب الإنجاز.'}
         </div>
       )}
     </div>

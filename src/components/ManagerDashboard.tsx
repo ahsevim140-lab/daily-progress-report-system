@@ -8,14 +8,15 @@ import { BuildingsView } from './manager/BuildingsView';
 import { EmployeesView } from './manager/EmployeesView';
 import { DepartmentsView } from './manager/DepartmentsView';
 import { TaskCategoriesView } from './manager/TaskCategoriesView';
-import { FileText, BarChart3, UserCog, Briefcase, Building, UserCheck, FolderKanban, ListTodo } from 'lucide-react';
+import { AttendanceView } from './manager/AttendanceView';
+import { FileText, BarChart3, UserCog, Briefcase, Building, UserCheck, FolderKanban, ListTodo, CalendarCheck } from 'lucide-react';
 
 interface ManagerDashboardProps {
   backendData: BackendData;
   onRefreshData: () => void;
 }
 
-type SubTab = 'reports' | 'progress' | 'users' | 'projects' | 'buildings' | 'employees' | 'departments' | 'tasks';
+type SubTab = 'reports' | 'progress' | 'attendance' | 'users' | 'projects' | 'buildings' | 'employees' | 'departments' | 'tasks';
 
 export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ backendData, onRefreshData }) => {
   const [subTab, setSubTab] = useState<SubTab>('reports');
@@ -23,6 +24,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ backendData,
   const tabs: { id: SubTab; label: string; icon: React.ReactNode }[] = [
     { id: 'reports', label: 'التقارير', icon: <FileText className="w-3.5 h-3.5" /> },
     { id: 'progress', label: 'نسب الإنجاز', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+    { id: 'attendance', label: 'الحضور', icon: <CalendarCheck className="w-3.5 h-3.5" /> },
     { id: 'users', label: 'المستخدمون', icon: <UserCog className="w-3.5 h-3.5" /> },
     { id: 'projects', label: 'المشاريع', icon: <Briefcase className="w-3.5 h-3.5" /> },
     { id: 'buildings', label: 'المباني', icon: <Building className="w-3.5 h-3.5" /> },
@@ -50,6 +52,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ backendData,
 
       {subTab === 'reports' && <ReportsView backendData={backendData} />}
       {subTab === 'progress' && <ProgressView backendData={backendData} onRefreshData={onRefreshData} />}
+      {subTab === 'attendance' && <AttendanceView backendData={backendData} />}
       {subTab === 'users' && <UsersView backendData={backendData} />}
       {subTab === 'projects' && <ProjectsView backendData={backendData} onRefreshData={onRefreshData} />}
       {subTab === 'buildings' && <BuildingsView backendData={backendData} onRefreshData={onRefreshData} />}

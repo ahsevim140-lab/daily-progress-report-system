@@ -86,12 +86,15 @@ export default function App() {
 
       {authenticated && (
         <div className="min-h-screen flex flex-col">
-          <header className="relative bg-[#3B4636] text-[#F2EEDD] px-6 py-6 border-b border-[#B89B5E]/30 shadow-md">
+          <header className="relative bg-[#3B4636] text-[#F2EEDD] px-6 py-6 border-b border-[#B89B5E]/30 shadow-md overflow-hidden">
+            <img
+              src={logoUrl}
+              alt="شعار"
+              className="hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 object-contain pointer-events-none opacity-95"
+            />
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-4 text-center md:text-right">
-                <div className="w-12 h-12 shrink-0 flex items-center justify-center">
-                  <img src={logoUrl} alt="شعار" className="w-11 h-11 object-contain" />
-                </div>
+              <div className="flex items-center gap-3 text-center md:text-right">
+                <img src={logoUrl} alt="شعار" className="w-10 h-10 object-contain md:hidden" />
                 <div>
                   <h1 className="font-serif text-2xl font-bold tracking-tight text-[#EFE8D6]">
                     سجل التقارير اليومية

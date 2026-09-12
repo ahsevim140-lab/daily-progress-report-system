@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import {
+  AttendanceRecord,
   BackendData,
   Building,
   DraftReportLine,
@@ -285,4 +286,46 @@ export async function fetchReportBatches(): Promise<ReportBatch[]> {
     building_name: row.buildings?.name,
     lines: (row.report_lines || []) as ReportLine[],
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+export async function fetchWorkStartTime(): Promise<string> {
+  const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'work_start_time').maybeSingle();
+  if (error) throw error;
+  return data?.value || '08:00';
+}
+
+export async function setWorkStartTime(value: string) {
+  const { error } = await supabase.from('app_settings').upsert({ key: 'work_start_time', value });
+  if (error) throw error;
+}
+
+export async function fetchAttendanceForDate(date: string): Promise<AttendanceRecord[]> {
+  const { data, error } = await supabase.from('attendance').select('id, date, employee_id, arrival_time, note').eq('date', date);
+  if (error) throw error;
+  return data || [];
+}
+
+export async function saveAttendanceForDate(date: string, records: { employee_id: string; arrival_time: string; note: string }[]) {
+  const rows = records
+    .filter((r) => r.arrival_time || r.note)
+    .map((r) => ({
+      date,
+      employee_id: r.employee_id,
+      arrival_time: r.arrival_time || null,
+      note: r.note || null,
+      updated_at: new Date().toISOString(),
+    }));
+
+  // Clear existing rows for this date, then insert the current set — mirrors
+  // the legacy sheet's "replace the day" save behavior.
+  const { error: deleteError } = await supabase.from('attendance').delete().eq('date', date);
+  if (deleteError) throw deleteError;
+
+  if (rows.length > 0) {
+    const { error: insertError } = await supabase.from('attendance').insert(rows);
+    if (insertError) throw insertError;
+  }
 }

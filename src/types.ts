@@ -18,6 +18,14 @@ export interface Project {
   created_by?: string | null;
 }
 
+export interface AttendanceRecord {
+  id?: string;
+  date: string;
+  employee_id: string;
+  arrival_time: string | null;
+  note: string | null;
+}
+
 export interface Building {
   id: string;
   project_id: string;
