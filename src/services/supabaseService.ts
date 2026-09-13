@@ -316,15 +316,17 @@ export async function fetchAttendanceForDate(date: string): Promise<AttendanceRe
 }
 
 export async function saveAttendanceForDate(date: string, records: { employee_id: string; arrival_time: string; note: string }[]) {
-  const rows = records
-    .filter((r) => r.arrival_time || r.note)
-    .map((r) => ({
-      date,
-      employee_id: r.employee_id,
-      arrival_time: r.arrival_time || null,
-      note: r.note || null,
-      updated_at: new Date().toISOString(),
-    }));
+  // Save a row for every employee, even with empty arrival_time — an absent
+  // day needs to be explicitly recorded (arrival_time = null on a tracked
+  // date), otherwise there's no way to tell "absent" apart from "this date
+  // was never tracked at all" when building the attendance report.
+  const rows = records.map((r) => ({
+    date,
+    employee_id: r.employee_id,
+    arrival_time: r.arrival_time || null,
+    note: r.note || null,
+    updated_at: new Date().toISOString(),
+  }));
 
   // Clear existing rows for this date, then insert the current set — mirrors
   // the legacy sheet's "replace the day" save behavior.
@@ -335,6 +337,16 @@ export async function saveAttendanceForDate(date: string, records: { employee_id
     const { error: insertError } = await supabase.from('attendance').insert(rows);
     if (insertError) throw insertError;
   }
+}
+
+export async function fetchAttendanceInRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('id, date, employee_id, arrival_time, note')
+    .gte('date', startDate)
+    .lte('date', endDate);
+  if (error) throw error;
+  return data || [];
 }
 
 // ---------------------------------------------------------------------------

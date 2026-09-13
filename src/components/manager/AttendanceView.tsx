@@ -6,7 +6,8 @@ import {
   fetchAttendanceForDate,
   saveAttendanceForDate,
 } from '../../services/supabaseService';
-import { Save, Clock } from 'lucide-react';
+import { Save, Clock, CalendarDays, CalendarRange } from 'lucide-react';
+import { AttendanceReportView } from './AttendanceReportView';
 
 interface AttendanceViewProps {
   backendData: BackendData;
@@ -35,6 +36,7 @@ function computeStatus(arrival: string, start: string): { status: string; lateMi
 }
 
 export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) => {
+  const [mode, setMode] = useState<'daily' | 'report'>('daily');
   const [date, setDate] = useState(toLocalYMD(new Date()));
   const [startTime, setStartTime] = useState('08:00');
   const [rows, setRows] = useState<Record<string, { arrival: string; note: string }>>({});
@@ -89,6 +91,29 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center gap-2 bg-[#2C2A22]/50 p-1.5 rounded-xl border border-[#B89B5E]/30 shadow-inner w-fit">
+        <button
+          onClick={() => setMode('daily')}
+          className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
+            mode === 'daily' ? 'bg-[#B89B5E] text-[#2C2A22] font-bold' : 'text-[#F2EEDD] hover:bg-white/10'
+          }`}
+        >
+          <CalendarDays className="w-3.5 h-3.5" /> التسجيل اليومي
+        </button>
+        <button
+          onClick={() => setMode('report')}
+          className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
+            mode === 'report' ? 'bg-[#B89B5E] text-[#2C2A22] font-bold' : 'text-[#F2EEDD] hover:bg-white/10'
+          }`}
+        >
+          <CalendarRange className="w-3.5 h-3.5" /> تقرير الحضور
+        </button>
+      </div>
+
+      {mode === 'report' ? (
+        <AttendanceReportView backendData={backendData} />
+      ) : (
+      <div className="space-y-4">
       {msg && <div className="p-3 bg-[#3B4636] text-[#F2EEDD] rounded-xl text-xs font-medium">{msg}</div>}
 
       <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 shadow-sm space-y-4">
@@ -188,6 +213,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
           </div>
         )}
       </div>
+      </div>
+      )}
     </div>
   );
 };

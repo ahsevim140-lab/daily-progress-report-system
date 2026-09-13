@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BackendData, Role } from '../../types';
 import { manageUsers, AppUser } from '../../services/supabaseService';
-import { Plus, KeyRound, UserCog, UserX } from 'lucide-react';
+import { Plus, KeyRound, UserCog, UserX, Trash2 } from 'lucide-react';
 
 interface UsersViewProps {
   backendData: BackendData;
@@ -103,6 +103,19 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
     }
   };
 
+  const deleteUser = async (user: AppUser) => {
+    setSaving(true);
+    try {
+      await manageUsers('delete', { id: user.id });
+      notify('تم حذف المستخدم.');
+      await loadUsers();
+    } catch (err: any) {
+      notify('خطأ: ' + (err.message || err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {msg && <div className="p-3 bg-[#3B4636] text-[#F2EEDD] rounded-xl text-xs font-medium">{msg}</div>}
@@ -190,6 +203,17 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
                 </button>
                 <button disabled={saving} onClick={() => { const password = window.prompt('أدخل كلمة المرور الجديدة (6 أحرف على الأقل):'); if (password) updateUser(user, { password }, 'تم تغيير كلمة المرور.'); }} className="px-2.5 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 hover:bg-[#F3EDDD] disabled:opacity-50">
                   <KeyRound className="w-3.5 h-3.5 inline ml-1" />تغيير كلمة المرور
+                </button>
+                <button
+                  disabled={saving}
+                  onClick={() => {
+                    if (window.confirm(`هل أنت متأكد من حذف المستخدم "${user.display_name || user.username}"؟ هذا الإجراء لا يمكن التراجع عنه.`)) {
+                      deleteUser(user);
+                    }
+                  }}
+                  className="px-2.5 py-2 rounded-lg border border-red-200 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5 inline ml-1" />حذف
                 </button>
               </div>
             </div>

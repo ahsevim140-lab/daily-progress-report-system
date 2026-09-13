@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BackendData } from '../../types';
 import { setProjectTaskWeight, overrideProjectTaskCompletion, addProjectTaskMeasure, deleteProjectTaskMeasure } from '../../services/supabaseService';
-import { AlertTriangle, Save, Plus, Trash2, Search, BarChart3 } from 'lucide-react';
+import { AlertTriangle, Save, Plus, Trash2, Search, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 interface ProgressViewProps {
@@ -32,6 +32,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
   const [newMeasure, setNewMeasure] = useState<Record<string, { name: string; weight: string }>>({});
   const [busyBuildingId, setBusyBuildingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
 
   const projectsWithBuildings = backendData.projects.filter(
     (p) => backendData.buildings.filter((b) => b.project_id === p.id).length > 0
@@ -152,12 +153,23 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
 
         return (
           <div key={project.id} className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-[#DED2AC] pb-3">
-              <h4 className="font-serif font-bold text-[#3B4636]">{project.name}</h4>
+            <button
+              onClick={() => setExpandedProjectId((cur) => (cur === project.id ? null : project.id))}
+              className="w-full flex items-center justify-between border-b border-[#DED2AC] pb-3 text-right"
+            >
+              <span className="flex items-center gap-2">
+                {expandedProjectId === project.id ? (
+                  <ChevronUp className="w-4 h-4 text-[#B89B5E]" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-[#B89B5E]" />
+                )}
+                <h4 className="font-serif font-bold text-[#3B4636]">{project.name}</h4>
+              </span>
               <span className="text-sm font-bold text-[#3B4636]">{projectCompletion}%</span>
-            </div>
+            </button>
             <ProgressBar value={projectCompletion} />
 
+            {expandedProjectId === project.id && (
             <div className="space-y-4 pt-2">
               {buildings.map((building) => {
                 const rows = allProjectTasks.filter((t) => t.building_id === building.id);
@@ -288,13 +300,14 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                 );
               })}
             </div>
+            )}
           </div>
         );
       })}
 
       {filteredProjects.every((p) => backendData.buildings.filter((b) => b.project_id === p.id).length === 0) && (
         <div className="text-center text-xs text-stone-500 py-10">
-          {search ? 'لا توجد مشاريع مطابقة للبحث.' : 'لا توجد مبانٍ مضافة بعد. أضف مبنى من تبويب "المباني" لبدء تتبع نسب الإنجاز.'}
+          {search ? 'لا توجد مشاريع مطابقة للبحث.' : 'لا توجد مبانٍ مضافة بعد. أضف مبنى من تبويب "المشاريع" لبدء تتبع نسب الإنجاز.'}
         </div>
       )}
     </div>

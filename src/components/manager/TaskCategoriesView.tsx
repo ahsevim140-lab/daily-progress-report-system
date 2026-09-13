@@ -92,11 +92,26 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
                 ))}
               </div>
               <div className="border-t border-[#DED2AC] pt-2.5">
-                <div className="text-[10px] text-stone-500 mb-1.5">
-                  يظهر هذا التصنيف لـ:{' '}
-                  <span className="font-semibold">
-                    {cat.visible_departments.length === 0 ? 'جميع الأقسام' : cat.visible_departments.join('، ')}
-                  </span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="text-[10px] text-stone-500">
+                    يظهر هذا التصنيف لـ:{' '}
+                    <span className="font-semibold">
+                      {cat.visible_departments.length === 0 ? 'جميع الأقسام' : cat.visible_departments.join('، ')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() =>
+                      withSaving(async () => {
+                        const allSelected = backendData.departments.every((d) => cat.visible_departments.includes(d));
+                        await updateTaskCategoryVisibility(cat.id, allSelected ? [] : backendData.departments);
+                      }, 'تم تحديث الأقسام التي تشاهد هذا التصنيف.')
+                    }
+                    className="text-[10px] text-[#3B4636] font-semibold hover:underline disabled:opacity-40"
+                  >
+                    {backendData.departments.every((d) => cat.visible_departments.includes(d)) ? 'إلغاء تحديد الكل' : 'تحديد الكل'}
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {backendData.departments.map((dept) => (

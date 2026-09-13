@@ -128,6 +128,39 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
       await submitReportBatch(selectedName, projectId, buildingId, lines);
       setStatus({ type: 'ok', message: 'تم حفظ التقرير بنجاح.' });
       setLines([emptyLine()]);
+      setLineCategory({});
+    } catch (err: any) {
+      setStatus({ type: 'err', message: 'حدث خطأ أثناء الإرسال: ' + (err.message || err) });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Used by the "new building / new project" continue buttons: submits the
+  // current batch (same validation as the main submit), then resets only
+  // what actually needs to change for the next entry — so the employee
+  // doesn't have to re-pick their name/department, or the project, each time.
+  const submitAndContinue = async (resetTarget: 'building' | 'project') => {
+    if (!canSubmit) {
+      setStatus({ type: 'err', message: 'يرجى تعبئة جميع الحقول المطلوبة قبل المتابعة إلى مبنى أو مشروع آخر.' });
+      return;
+    }
+
+    setSubmitting(true);
+    setStatus({ type: 'info', message: 'جارٍ حفظ التقرير...' });
+
+    try {
+      await submitReportBatch(selectedName, projectId, buildingId, lines);
+      setBuildingId('');
+      if (resetTarget === 'project') setProjectId('');
+      setLines([emptyLine()]);
+      setLineCategory({});
+      setStatus({
+        type: 'ok',
+        message: resetTarget === 'project'
+          ? 'تم حفظ التقرير. اختر المشروع الجديد للمتابعة.'
+          : 'تم حفظ التقرير. اختر المبنى التالي ضمن نفس المشروع للمتابعة.',
+      });
     } catch (err: any) {
       setStatus({ type: 'err', message: 'حدث خطأ أثناء الإرسال: ' + (err.message || err) });
     } finally {
@@ -289,10 +322,11 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                       <select
                         value={lineCategory[line.id] || ''}
                         onChange={(e) => handleLineCategoryChange(line.id, e.target.value)}
-                        className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
+                        className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] disabled:bg-stone-100 disabled:text-stone-400"
                         required
+                        disabled={!line.department}
                       >
-                        <option value="">اختر التصنيف...</option>
+                        <option value="">{line.department ? 'اختر التصنيف...' : 'اختر القسم أولاً...'}</option>
                         {getVisibleCategories(line.department).map((group) => (
                           <option key={group.id} value={group.main}>{group.main}</option>
                         ))}
@@ -399,14 +433,37 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
             })}
           </div>
 
-          <button
-            type="button"
-            onClick={handleAddLine}
-            className="w-full py-3 px-4 border border-dashed border-[#B89B5E] text-[#3B4636] hover:bg-[#B89B5E]/10 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
-          >
-            <Plus className="w-4 h-4 text-[#B89B5E]" />
-            <span>إضافة مهمة أخرى لنفس المبنى</span>
-          </button>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            <button
+              type="button"
+              onClick={handleAddLine}
+              className="py-3 px-4 border border-dashed border-[#B89B5E] text-[#3B4636] hover:bg-[#B89B5E]/10 rounded-xl text-xs font-semibold flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4 text-[#B89B5E]" />
+              <span>إضافة مهمة أخرى لنفس المبنى</span>
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => submitAndContinue('building')}
+              className="py-3 px-4 border border-dashed border-[#B89B5E] text-[#3B4636] hover:bg-[#B89B5E]/10 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Building className="w-4 h-4 text-[#B89B5E]" />
+              <span>إضافة مبنى آخر لنفس المشروع</span>
+            </button>
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={() => submitAndContinue('project')}
+              className="py-3 px-4 border border-dashed border-[#B89B5E] text-[#3B4636] hover:bg-[#B89B5E]/10 rounded-xl text-xs font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Briefcase className="w-4 h-4 text-[#B89B5E]" />
+              <span>إضافة مشروع جديد</span>
+            </button>
+          </div>
+          <p className="text-[10px] text-stone-500 -mt-2">
+            الزرّان الأخيران يحفظان التقرير الحالي أولاً، ثم يفتحان مشروعاً/مبنى جديداً مباشرة.
+          </p>
 
           <div className="pt-2">
             <button

@@ -3,20 +3,19 @@ import { BackendData } from '../types';
 import { ReportsView } from './manager/ReportsView';
 import { ProgressView } from './manager/ProgressView';
 import { UsersView } from './manager/UsersView';
-import { ProjectsView } from './manager/ProjectsView';
-import { BuildingsView } from './manager/BuildingsView';
+import { ProjectsHubView } from './manager/ProjectsHubView';
 import { EmployeesView } from './manager/EmployeesView';
 import { DepartmentsView } from './manager/DepartmentsView';
 import { TaskCategoriesView } from './manager/TaskCategoriesView';
 import { AttendanceView } from './manager/AttendanceView';
-import { FileText, BarChart3, UserCog, Briefcase, Building, UserCheck, FolderKanban, ListTodo, CalendarCheck } from 'lucide-react';
+import { FileText, BarChart3, UserCog, Briefcase, UserCheck, FolderKanban, ListTodo, CalendarCheck } from 'lucide-react';
 
 interface ManagerDashboardProps {
   backendData: BackendData;
   onRefreshData: () => void;
 }
 
-type SubTab = 'reports' | 'progress' | 'attendance' | 'users' | 'projects' | 'buildings' | 'employees' | 'departments' | 'tasks';
+type SubTab = 'reports' | 'progress' | 'attendance' | 'users' | 'projects' | 'employees' | 'departments' | 'tasks';
 
 export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ backendData, onRefreshData }) => {
   const [subTab, setSubTab] = useState<SubTab>('reports');
@@ -27,7 +26,6 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ backendData,
     { id: 'attendance', label: 'الحضور', icon: <CalendarCheck className="w-3.5 h-3.5" /> },
     { id: 'users', label: 'المستخدمون', icon: <UserCog className="w-3.5 h-3.5" /> },
     { id: 'projects', label: 'المشاريع', icon: <Briefcase className="w-3.5 h-3.5" /> },
-    { id: 'buildings', label: 'المباني', icon: <Building className="w-3.5 h-3.5" /> },
     { id: 'employees', label: 'الموظفون', icon: <UserCheck className="w-3.5 h-3.5" /> },
     { id: 'departments', label: 'الأقسام', icon: <FolderKanban className="w-3.5 h-3.5" /> },
     { id: 'tasks', label: 'تصنيفات المهام', icon: <ListTodo className="w-3.5 h-3.5" /> },
@@ -54,8 +52,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ backendData,
       {subTab === 'progress' && <ProgressView backendData={backendData} onRefreshData={onRefreshData} />}
       {subTab === 'attendance' && <AttendanceView backendData={backendData} />}
       {subTab === 'users' && <UsersView backendData={backendData} />}
-      {subTab === 'projects' && <ProjectsView backendData={backendData} onRefreshData={onRefreshData} />}
-      {subTab === 'buildings' && <BuildingsView backendData={backendData} onRefreshData={onRefreshData} />}
+      {subTab === 'projects' && <ProjectsHubView backendData={backendData} onRefreshData={onRefreshData} />}
       {subTab === 'employees' && <EmployeesView backendData={backendData} onRefreshData={onRefreshData} />}
       {subTab === 'departments' && <DepartmentsView backendData={backendData} onRefreshData={onRefreshData} />}
       {subTab === 'tasks' && <TaskCategoriesView backendData={backendData} onRefreshData={onRefreshData} />}
