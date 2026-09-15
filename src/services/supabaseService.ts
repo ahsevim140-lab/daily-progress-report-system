@@ -244,6 +244,28 @@ export async function deleteProjectTaskMeasure(id: string) {
   if (error) throw error;
 }
 
+// Track a specific sub-task under a real department separately, instead of
+// (or alongside) the department's shared blanket row. Once this exists, a
+// report submitted with a matching department+task updates this row
+// specifically rather than the department's shared bucket.
+export async function addProjectTaskDetail(
+  projectId: string,
+  buildingId: string,
+  department: string,
+  task: string,
+  weightPercent: number
+) {
+  const { error } = await supabase.from('project_tasks').insert({
+    project_id: projectId,
+    building_id: buildingId,
+    department,
+    task,
+    weight_percent: weightPercent,
+    completion_percent: 0,
+  });
+  if (error) throw error;
+}
+
 // ---------------------------------------------------------------------------
 // Reports
 // ---------------------------------------------------------------------------
@@ -310,12 +332,18 @@ export async function setWorkStartTime(value: string) {
 }
 
 export async function fetchAttendanceForDate(date: string): Promise<AttendanceRecord[]> {
-  const { data, error } = await supabase.from('attendance').select('id, date, employee_id, arrival_time, note').eq('date', date);
+  const { data, error } = await supabase
+    .from('attendance')
+    .select('id, date, employee_id, arrival_time, note, is_day_off, hours_off')
+    .eq('date', date);
   if (error) throw error;
   return data || [];
 }
 
-export async function saveAttendanceForDate(date: string, records: { employee_id: string; arrival_time: string; note: string }[]) {
+export async function saveAttendanceForDate(
+  date: string,
+  records: { employee_id: string; arrival_time: string; note: string; is_day_off: boolean; hours_off: string }[]
+) {
   // Save a row for every employee, even with empty arrival_time — an absent
   // day needs to be explicitly recorded (arrival_time = null on a tracked
   // date), otherwise there's no way to tell "absent" apart from "this date
@@ -325,6 +353,8 @@ export async function saveAttendanceForDate(date: string, records: { employee_id
     employee_id: r.employee_id,
     arrival_time: r.arrival_time || null,
     note: r.note || null,
+    is_day_off: r.is_day_off,
+    hours_off: r.hours_off ? Number(r.hours_off) : null,
     updated_at: new Date().toISOString(),
   }));
 
@@ -342,7 +372,7 @@ export async function saveAttendanceForDate(date: string, records: { employee_id
 export async function fetchAttendanceInRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
   const { data, error } = await supabase
     .from('attendance')
-    .select('id, date, employee_id, arrival_time, note')
+    .select('id, date, employee_id, arrival_time, note, is_day_off, hours_off')
     .gte('date', startDate)
     .lte('date', endDate);
   if (error) throw error;

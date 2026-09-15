@@ -31,6 +31,8 @@ export interface AttendanceRecord {
   employee_id: string;
   arrival_time: string | null;
   note: string | null;
+  is_day_off: boolean;
+  hours_off: number | null;
 }
 
 export interface Building {
@@ -45,6 +47,7 @@ export interface ProjectTask {
   project_id: string;
   building_id: string;
   department: string;
+  task: string | null;
   weight_percent: number;
   completion_percent: number;
 }

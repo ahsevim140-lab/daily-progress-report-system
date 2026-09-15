@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { BackendData } from '../../types';
-import { setProjectTaskWeight, overrideProjectTaskCompletion, addProjectTaskMeasure, deleteProjectTaskMeasure } from '../../services/supabaseService';
+import { setProjectTaskWeight, overrideProjectTaskCompletion, addProjectTaskMeasure, deleteProjectTaskMeasure, addProjectTaskDetail } from '../../services/supabaseService';
 import { AlertTriangle, Save, Plus, Trash2, Search, BarChart3, ChevronDown, ChevronUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -30,6 +30,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
   const [savingId, setSavingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [newMeasure, setNewMeasure] = useState<Record<string, { name: string; weight: string }>>({});
+  const [newTaskDetail, setNewTaskDetail] = useState<Record<string, { department: string; task: string; weight: string }>>({});
   const [busyBuildingId, setBusyBuildingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
@@ -75,6 +76,22 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
     setBusyBuildingId(buildingId);
     try {
       await deleteProjectTaskMeasure(id);
+      onRefreshData();
+    } finally {
+      setBusyBuildingId(null);
+    }
+  };
+
+  const handleAddTaskDetail = async (projectId: string, buildingId: string) => {
+    const draft = newTaskDetail[buildingId];
+    const department = draft?.department;
+    const task = draft?.task;
+    const weight = Number(draft?.weight);
+    if (!department || !task || Number.isNaN(weight) || weight < 0 || weight > 100) return;
+    setBusyBuildingId(buildingId);
+    try {
+      await addProjectTaskDetail(projectId, buildingId, department, task, weight);
+      setNewTaskDetail((m) => ({ ...m, [buildingId]: { department: '', task: '', weight: '' } }));
       onRefreshData();
     } finally {
       setBusyBuildingId(null);
@@ -199,7 +216,7 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                         return (
                           <div key={row.id} className="bg-white border border-[#DED2AC] rounded-lg p-2.5 space-y-1.5">
                             <div className="flex items-center justify-between text-[11px] font-semibold text-stone-800">
-                              <span>{row.department}</span>
+                              <span>{row.task ? `${row.department} — ${row.task}` : row.department}</span>
                               <div className="flex items-center gap-2">
                                 <span className="font-mono text-stone-500">حالياً {row.completion_percent}%</span>
                                 {!readOnly && (
@@ -293,6 +310,76 @@ export const ProgressView: React.FC<ProgressViewProps> = ({ backendData, onRefre
                         className="px-2 py-1.5 bg-[#3B4636] text-[#F2EEDD] rounded text-[11px] flex items-center gap-1 disabled:opacity-40"
                       >
                         <Plus className="w-3 h-3" /> إضافة قياس
+                      </button>
+                    </div>
+                    )}
+
+                    {!readOnly && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-[#DED2AC]">
+                      <span className="text-[10px] text-stone-500 w-full">تتبّع مهمة محددة ضمن أحد الأقسام بوزنها الخاص:</span>
+                      <select
+                        value={newTaskDetail[building.id]?.department ?? ''}
+                        onChange={(e) =>
+                          setNewTaskDetail((m) => ({
+                            ...m,
+                            [building.id]: { department: e.target.value, task: '', weight: m[building.id]?.weight ?? '' },
+                          }))
+                        }
+                        className="border border-[#DED2AC] rounded px-2 py-1.5 text-[11px] bg-white"
+                      >
+                        <option value="">اختر القسم...</option>
+                        {backendData.departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <select
+                        value={newTaskDetail[building.id]?.task ?? ''}
+                        disabled={!newTaskDetail[building.id]?.department}
+                        onChange={(e) =>
+                          setNewTaskDetail((m) => ({
+                            ...m,
+                            [building.id]: { department: m[building.id]?.department ?? '', task: e.target.value, weight: m[building.id]?.weight ?? '' },
+                          }))
+                        }
+                        className="flex-1 border border-[#DED2AC] rounded px-2 py-1.5 text-[11px] bg-white disabled:bg-stone-100"
+                      >
+                        <option value="">{newTaskDetail[building.id]?.department ? 'اختر المهمة...' : 'اختر القسم أولاً...'}</option>
+                        {backendData.taskCategories
+                          .filter(
+                            (cat) =>
+                              cat.visible_departments.length === 0 ||
+                              cat.visible_departments.includes(newTaskDetail[building.id]?.department ?? '')
+                          )
+                          .map((cat) => (
+                            <optgroup key={cat.id} label={cat.main}>
+                              {cat.subs.map((sub) => <option key={sub} value={sub}>{sub}</option>)}
+                            </optgroup>
+                          ))}
+                      </select>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        placeholder="الوزن"
+                        value={newTaskDetail[building.id]?.weight ?? ''}
+                        onChange={(e) =>
+                          setNewTaskDetail((m) => ({
+                            ...m,
+                            [building.id]: { department: m[building.id]?.department ?? '', task: m[building.id]?.task ?? '', weight: e.target.value },
+                          }))
+                        }
+                        className="w-16 border border-[#DED2AC] rounded px-1.5 py-1.5 text-[11px] bg-white"
+                      />
+                      <button
+                        type="button"
+                        disabled={
+                          busyBuildingId === building.id ||
+                          !newTaskDetail[building.id]?.department ||
+                          !newTaskDetail[building.id]?.task ||
+                          !newTaskDetail[building.id]?.weight
+                        }
+                        onClick={() => handleAddTaskDetail(project.id, building.id)}
+                        className="px-2 py-1.5 bg-[#3B4636] text-[#F2EEDD] rounded text-[11px] flex items-center gap-1 disabled:opacity-40"
+                      >
+                        <Plus className="w-3 h-3" /> إضافة مهمة
                       </button>
                     </div>
                     )}

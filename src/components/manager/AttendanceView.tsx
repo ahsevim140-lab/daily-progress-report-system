@@ -6,11 +6,18 @@ import {
   fetchAttendanceForDate,
   saveAttendanceForDate,
 } from '../../services/supabaseService';
-import { Save, Clock, CalendarDays, CalendarRange } from 'lucide-react';
+import { Save, Clock, CalendarDays, CalendarRange, Umbrella } from 'lucide-react';
 import { AttendanceReportView } from './AttendanceReportView';
 
 interface AttendanceViewProps {
   backendData: BackendData;
+}
+
+interface RowState {
+  arrival: string;
+  note: string;
+  isDayOff: boolean;
+  hoursOff: string;
 }
 
 function toLocalYMD(date: Date): string {
@@ -26,9 +33,10 @@ function parseMinutes(value: string): number | null {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
-function computeStatus(arrival: string, start: string): { status: string; lateMinutes: number | '' } {
-  if (!arrival) return { status: 'لم يسجل', lateMinutes: '' };
-  const a = parseMinutes(arrival);
+function computeStatus(row: RowState, start: string): { status: string; lateMinutes: number | '' } {
+  if (row.isDayOff) return { status: 'إجازة', lateMinutes: '' };
+  if (!row.arrival) return { status: 'لم يسجل', lateMinutes: '' };
+  const a = parseMinutes(row.arrival);
   const s = parseMinutes(start) ?? 8 * 60;
   if (a === null) return { status: 'لم يسجل', lateMinutes: '' };
   const late = Math.max(0, a - s);
@@ -39,7 +47,7 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
   const [mode, setMode] = useState<'daily' | 'report'>('daily');
   const [date, setDate] = useState(toLocalYMD(new Date()));
   const [startTime, setStartTime] = useState('08:00');
-  const [rows, setRows] = useState<Record<string, { arrival: string; note: string }>>({});
+  const [rows, setRows] = useState<Record<string, RowState>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
@@ -54,9 +62,14 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
     try {
       const [start, records] = await Promise.all([fetchWorkStartTime(), fetchAttendanceForDate(d)]);
       setStartTime(start);
-      const map: Record<string, { arrival: string; note: string }> = {};
+      const map: Record<string, RowState> = {};
       records.forEach((r) => {
-        map[r.employee_id] = { arrival: r.arrival_time || '', note: r.note || '' };
+        map[r.employee_id] = {
+          arrival: r.arrival_time || '',
+          note: r.note || '',
+          isDayOff: r.is_day_off,
+          hoursOff: r.hours_off != null ? String(r.hours_off) : '',
+        };
       });
       setRows(map);
     } catch (err: any) {
@@ -71,6 +84,19 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
+  const updateRow = (empId: string, patch: Partial<RowState>) => {
+    setRows((r) => ({
+      ...r,
+      [empId]: {
+        arrival: r[empId]?.arrival || '',
+        note: r[empId]?.note || '',
+        isDayOff: r[empId]?.isDayOff || false,
+        hoursOff: r[empId]?.hoursOff || '',
+        ...patch,
+      },
+    }));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -79,6 +105,8 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
         employee_id: e.id,
         arrival_time: rows[e.id]?.arrival || '',
         note: rows[e.id]?.note || '',
+        is_day_off: rows[e.id]?.isDayOff || false,
+        hours_off: rows[e.id]?.hoursOff || '',
       }));
       await saveAttendanceForDate(date, records);
       notify('تم حفظ بيانات الحضور بنجاح.');
@@ -157,51 +185,76 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
                 <tr className="bg-[#3B4636] text-[#F2EEDD]">
                   <th className="p-2.5 text-right font-semibold">الموظف</th>
                   <th className="p-2.5 text-right font-semibold">القسم</th>
+                  <th className="p-2.5 text-right font-semibold">إجازة</th>
                   <th className="p-2.5 text-right font-semibold">وقت الحضور</th>
                   <th className="p-2.5 text-right font-semibold">الحالة</th>
                   <th className="p-2.5 text-right font-semibold">التأخير (د)</th>
+                  <th className="p-2.5 text-right font-semibold">ساعات غياب إضافية</th>
                   <th className="p-2.5 text-right font-semibold">ملاحظات</th>
                 </tr>
               </thead>
               <tbody>
                 {backendData.employees.map((emp, i) => {
-                  const arrival = rows[emp.id]?.arrival || '';
-                  const note = rows[emp.id]?.note || '';
-                  const { status, lateMinutes } = computeStatus(arrival, startTime);
+                  const row: RowState = rows[emp.id] || { arrival: '', note: '', isDayOff: false, hoursOff: '' };
+                  const { status, lateMinutes } = computeStatus(row, startTime);
                   return (
                     <tr key={emp.id} className={i % 2 === 1 ? 'bg-[#F3EDDD]' : 'bg-white'}>
                       <td className="p-2.5 font-medium text-stone-900">{emp.name}</td>
                       <td className="p-2.5 text-stone-600">{emp.department}</td>
                       <td className="p-2.5">
+                        <label className="inline-flex items-center gap-1 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={row.isDayOff}
+                            onChange={(e) => updateRow(emp.id, { isDayOff: e.target.checked, arrival: '' })}
+                          />
+                          <Umbrella className="w-3.5 h-3.5 text-[#B89B5E]" />
+                        </label>
+                      </td>
+                      <td className="p-2.5">
                         <input
                           type="time"
-                          value={arrival}
-                          onChange={(e) =>
-                            setRows((r) => ({ ...r, [emp.id]: { arrival: e.target.value, note: r[emp.id]?.note || '' } }))
-                          }
-                          className="border border-[#DED2AC] rounded px-2 py-1 text-xs bg-white"
+                          value={row.arrival}
+                          disabled={row.isDayOff}
+                          onChange={(e) => updateRow(emp.id, { arrival: e.target.value })}
+                          className="border border-[#DED2AC] rounded px-2 py-1 text-xs bg-white disabled:bg-stone-100 disabled:text-stone-400"
                         />
                       </td>
                       <td className="p-2.5">
                         <span
                           className={`inline-flex items-center gap-1 font-semibold ${
-                            status === 'حاضر' ? 'text-emerald-700' : status === 'متأخر' ? 'text-amber-700' : 'text-stone-400'
+                            status === 'حاضر'
+                              ? 'text-emerald-700'
+                              : status === 'متأخر'
+                              ? 'text-amber-700'
+                              : status === 'إجازة'
+                              ? 'text-sky-700'
+                              : 'text-stone-400'
                           }`}
                         >
-                          <Clock className="w-3 h-3" />
+                          {status === 'إجازة' ? <Umbrella className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
                           {status}
                         </span>
                       </td>
                       <td className="p-2.5 font-mono text-stone-600">{lateMinutes === '' ? '—' : lateMinutes}</td>
                       <td className="p-2.5">
                         <input
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          value={row.hoursOff}
+                          placeholder="0"
+                          onChange={(e) => updateRow(emp.id, { hoursOff: e.target.value })}
+                          className="w-20 border border-[#DED2AC] rounded px-2 py-1 text-xs bg-white"
+                        />
+                      </td>
+                      <td className="p-2.5">
+                        <input
                           type="text"
-                          value={note}
+                          value={row.note}
                           maxLength={500}
                           placeholder="ملاحظة"
-                          onChange={(e) =>
-                            setRows((r) => ({ ...r, [emp.id]: { arrival: r[emp.id]?.arrival || '', note: e.target.value } }))
-                          }
+                          onChange={(e) => updateRow(emp.id, { note: e.target.value })}
                           className="w-full border border-[#DED2AC] rounded px-2 py-1 text-xs bg-white"
                         />
                       </td>
@@ -212,6 +265,9 @@ export const AttendanceView: React.FC<AttendanceViewProps> = ({ backendData }) =
             </table>
           </div>
         )}
+        <p className="text-[10px] text-stone-500">
+          "إجازة" تعني يوم عن العمل مخطط له — لا يُحتسب كغياب. "ساعات غياب إضافية" حقل يدوي منفصل عن حساب التأخير التلقائي (مثل الخروج المبكر أو الغياب الجزئي).
+        </p>
       </div>
       </div>
       )}

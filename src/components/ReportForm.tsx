@@ -84,18 +84,14 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
   const handleLineChange = (id: string, field: keyof DraftReportLine, value: string) => {
     setLines(lines.map((l) => (l.id === id ? { ...l, [field]: value } : l)));
   };
-  const handleLineDeptChange = (id: string, department: string) => {
-    setLines(lines.map((l) => (l.id === id ? { ...l, department, task: '' } : l)));
-    setLineCategory((prev) => ({ ...prev, [id]: '' }));
-  };
   const handleLineCategoryChange = (id: string, category: string) => {
     setLineCategory((prev) => ({ ...prev, [id]: category }));
     setLines(lines.map((l) => (l.id === id ? { ...l, task: '' } : l)));
   };
 
   const lineStatus = (line: DraftReportLine): 'up' | 'stalled' | 'regressed' | null => {
-    if (!line.department || line.percentage === '') return null;
-    const current = currentCompletion(line.department);
+    if (!selectedDept || line.percentage === '') return null;
+    const current = currentCompletion(selectedDept);
     if (current === null) return null;
     const pct = Number(line.percentage);
     if (pct > current) return 'up';
@@ -106,7 +102,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
   const canSubmit = useMemo(() => {
     if (!selectedDept || !selectedName || !projectId || !buildingId) return false;
     return lines.every((l) => {
-      if (!l.department || !l.task || l.percentage === '') return false;
+      if (!l.task || l.percentage === '') return false;
       const st = lineStatus(l);
       if ((st === 'stalled' || st === 'regressed') && !l.note.trim()) return false;
       return true;
@@ -125,7 +121,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
     setStatus({ type: 'info', message: 'جارٍ حفظ التقرير...' });
 
     try {
-      await submitReportBatch(selectedName, projectId, buildingId, lines);
+      const linesWithDept = lines.map((l) => ({ ...l, department: selectedDept }));
+      await submitReportBatch(selectedName, projectId, buildingId, linesWithDept);
       setStatus({ type: 'ok', message: 'تم حفظ التقرير بنجاح.' });
       setLines([emptyLine()]);
       setLineCategory({});
@@ -150,7 +147,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
     setStatus({ type: 'info', message: 'جارٍ حفظ التقرير...' });
 
     try {
-      await submitReportBatch(selectedName, projectId, buildingId, lines);
+      const linesWithDept = lines.map((l) => ({ ...l, department: selectedDept }));
+      await submitReportBatch(selectedName, projectId, buildingId, linesWithDept);
       setBuildingId('');
       if (resetTarget === 'project') setProjectId('');
       setLines([emptyLine()]);
@@ -184,6 +182,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                 onChange={(e) => {
                   setSelectedDept(e.target.value);
                   setSelectedName('');
+                  setLineCategory({});
+                  setLines((prev) => prev.map((l) => ({ ...l, task: '' })));
                 }}
                 className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#B89B5E] font-medium"
                 required
@@ -261,7 +261,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
           {/* Task lines for this project+building */}
           <div className="space-y-4">
             {lines.map((line, index) => {
-              const current = currentCompletion(line.department);
+              const current = currentCompletion(selectedDept);
               const status = lineStatus(line);
               const needsNote = status === 'stalled' || status === 'regressed';
 
@@ -295,25 +295,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div>
-                      <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
-                        <Layers className="w-3.5 h-3.5 text-[#B89B5E]" />
-                        القسم / الاختصاص
-                      </label>
-                      <select
-                        value={line.department}
-                        onChange={(e) => handleLineDeptChange(line.id, e.target.value)}
-                        className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
-                        required
-                      >
-                        <option value="">اختر القسم...</option>
-                        {backendData.departments.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                    </div>
-
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                       <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
                         <FileText className="w-3.5 h-3.5 text-[#B89B5E]" />
@@ -324,10 +306,10 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                         onChange={(e) => handleLineCategoryChange(line.id, e.target.value)}
                         className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] disabled:bg-stone-100 disabled:text-stone-400"
                         required
-                        disabled={!line.department}
+                        disabled={!selectedDept}
                       >
-                        <option value="">{line.department ? 'اختر التصنيف...' : 'اختر القسم أولاً...'}</option>
-                        {getVisibleCategories(line.department).map((group) => (
+                        <option value="">{selectedDept ? 'اختر التصنيف...' : 'اختر القسم أولاً...'}</option>
+                        {getVisibleCategories(selectedDept).map((group) => (
                           <option key={group.id} value={group.main}>{group.main}</option>
                         ))}
                       </select>
@@ -346,7 +328,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData }) => {
                         disabled={!lineCategory[line.id]}
                       >
                         <option value="">{lineCategory[line.id] ? 'اختر المهمة...' : 'اختر التصنيف أولاً...'}</option>
-                        {getTasksForCategory(line.department, lineCategory[line.id] || '').map((sub) => (
+                        {getTasksForCategory(selectedDept, lineCategory[line.id] || '').map((sub) => (
                           <option key={sub} value={sub}>{sub}</option>
                         ))}
                       </select>

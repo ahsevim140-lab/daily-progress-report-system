@@ -20,6 +20,14 @@ function parseMinutes(value: string): number | null {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
+interface AttendanceRow {
+  date: string;
+  employee_id: string;
+  arrival_time: string | null;
+  is_day_off: boolean;
+  hours_off: number | null;
+}
+
 export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ backendData }) => {
   const today = toLocalYMD(new Date());
   const monthAgo = toLocalYMD(new Date(Date.now() - 29 * 24 * 60 * 60 * 1000));
@@ -29,7 +37,7 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
   const [scopeDept, setScopeDept] = useState('');
   const [scopeEmployee, setScopeEmployee] = useState('');
   const [startTime, setStartTime] = useState('08:00');
-  const [rows, setRows] = useState<{ date: string; employee_id: string; arrival_time: string | null }[]>([]);
+  const [rows, setRows] = useState<AttendanceRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -40,7 +48,15 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
     try {
       const [records, start] = await Promise.all([fetchAttendanceInRange(fromDate, toDate), fetchWorkStartTime()]);
       setStartTime(start);
-      setRows(records.map((r) => ({ date: r.date, employee_id: r.employee_id, arrival_time: r.arrival_time })));
+      setRows(
+        records.map((r) => ({
+          date: r.date,
+          employee_id: r.employee_id,
+          arrival_time: r.arrival_time,
+          is_day_off: r.is_day_off,
+          hours_off: r.hours_off,
+        }))
+      );
     } catch (err: any) {
       setError(err.message || String(err));
     } finally {
@@ -62,10 +78,13 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
     return employeesInScope.map((emp) => {
       const empRows = rows.filter((r) => r.employee_id === emp.id);
       const daysTracked = empRows.length;
-      const daysOff = empRows.filter((r) => !r.arrival_time).length;
+      const daysOffPlanned = empRows.filter((r) => r.is_day_off).length;
+      const daysAbsent = empRows.filter((r) => !r.is_day_off && !r.arrival_time).length;
       let lateMinutesTotal = 0;
+      let manualHoursOffTotal = 0;
       empRows.forEach((r) => {
-        if (!r.arrival_time) return;
+        if (r.hours_off) manualHoursOffTotal += r.hours_off;
+        if (r.is_day_off || !r.arrival_time) return;
         const a = parseMinutes(r.arrival_time);
         if (a === null) return;
         lateMinutesTotal += Math.max(0, a - startMin);
@@ -73,8 +92,10 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
       return {
         employee: emp,
         daysTracked,
-        daysOff,
-        hoursOff: Math.round((lateMinutesTotal / 60) * 10) / 10,
+        daysOffPlanned,
+        daysAbsent,
+        lateHours: Math.round((lateMinutesTotal / 60) * 10) / 10,
+        manualHoursOff: Math.round(manualHoursOffTotal * 10) / 10,
       };
     });
   }, [employeesInScope, rows, startTime]);
@@ -82,10 +103,12 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
   const totals = summary.reduce(
     (acc, s) => ({
       daysTracked: acc.daysTracked + s.daysTracked,
-      daysOff: acc.daysOff + s.daysOff,
-      hoursOff: Math.round((acc.hoursOff + s.hoursOff) * 10) / 10,
+      daysOffPlanned: acc.daysOffPlanned + s.daysOffPlanned,
+      daysAbsent: acc.daysAbsent + s.daysAbsent,
+      lateHours: Math.round((acc.lateHours + s.lateHours) * 10) / 10,
+      manualHoursOff: Math.round((acc.manualHoursOff + s.manualHoursOff) * 10) / 10,
     }),
-    { daysTracked: 0, daysOff: 0, hoursOff: 0 }
+    { daysTracked: 0, daysOffPlanned: 0, daysAbsent: 0, lateHours: 0, manualHoursOff: 0 }
   );
 
   return (
@@ -137,18 +160,26 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
           <div className="text-center text-xs text-stone-500 py-8">جارٍ التحميل...</div>
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-3 text-center">
                 <div className="text-[10px] text-stone-500">أيام مسجّلة</div>
                 <div className="text-lg font-bold text-[#3B4636]">{totals.daysTracked}</div>
               </div>
               <div className="bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-3 text-center">
-                <div className="text-[10px] text-stone-500">إجمالي أيام الغياب</div>
-                <div className="text-lg font-bold text-red-700">{totals.daysOff}</div>
+                <div className="text-[10px] text-stone-500">أيام إجازة</div>
+                <div className="text-lg font-bold text-sky-700">{totals.daysOffPlanned}</div>
               </div>
               <div className="bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-3 text-center">
-                <div className="text-[10px] text-stone-500">إجمالي ساعات التأخير</div>
-                <div className="text-lg font-bold text-amber-700">{totals.hoursOff}</div>
+                <div className="text-[10px] text-stone-500">أيام غياب</div>
+                <div className="text-lg font-bold text-red-700">{totals.daysAbsent}</div>
+              </div>
+              <div className="bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-3 text-center">
+                <div className="text-[10px] text-stone-500">ساعات تأخير</div>
+                <div className="text-lg font-bold text-amber-700">{totals.lateHours}</div>
+              </div>
+              <div className="bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-3 text-center">
+                <div className="text-[10px] text-stone-500">ساعات غياب إضافية</div>
+                <div className="text-lg font-bold text-amber-700">{totals.manualHoursOff}</div>
               </div>
             </div>
 
@@ -159,8 +190,10 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
                     <th className="p-2.5 text-right font-semibold">الموظف</th>
                     <th className="p-2.5 text-right font-semibold">القسم</th>
                     <th className="p-2.5 text-right font-semibold">أيام مسجّلة</th>
-                    <th className="p-2.5 text-right font-semibold">أيام الغياب</th>
-                    <th className="p-2.5 text-right font-semibold">ساعات التأخير</th>
+                    <th className="p-2.5 text-right font-semibold">أيام إجازة</th>
+                    <th className="p-2.5 text-right font-semibold">أيام غياب</th>
+                    <th className="p-2.5 text-right font-semibold">ساعات تأخير</th>
+                    <th className="p-2.5 text-right font-semibold">ساعات غياب إضافية</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -169,13 +202,15 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
                       <td className="p-2.5 font-medium text-stone-900">{s.employee.name}</td>
                       <td className="p-2.5 text-stone-600">{s.employee.department}</td>
                       <td className="p-2.5 font-mono">{s.daysTracked}</td>
-                      <td className="p-2.5 font-mono text-red-700">{s.daysOff}</td>
-                      <td className="p-2.5 font-mono text-amber-700">{s.hoursOff}</td>
+                      <td className="p-2.5 font-mono text-sky-700">{s.daysOffPlanned}</td>
+                      <td className="p-2.5 font-mono text-red-700">{s.daysAbsent}</td>
+                      <td className="p-2.5 font-mono text-amber-700">{s.lateHours}</td>
+                      <td className="p-2.5 font-mono text-amber-700">{s.manualHoursOff}</td>
                     </tr>
                   ))}
                   {summary.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-stone-400">
+                      <td colSpan={7} className="p-6 text-center text-stone-400">
                         <Search className="w-4 h-4 inline ml-1" /> لا توجد بيانات ضمن هذا النطاق.
                       </td>
                     </tr>
@@ -184,7 +219,8 @@ export const AttendanceReportView: React.FC<AttendanceReportViewProps> = ({ back
               </table>
             </div>
             <p className="text-[10px] text-stone-500">
-              "أيام الغياب" تُحسب من الأيام التي حفظ فيها المدير سجل الحضور اليومي ولم يسجَّل وقت حضور لهذا الموظف. أيام لم يتم تسجيل الحضور لها إطلاقاً لا تُحتسب.
+              "أيام إجازة" لا تُحتسب كغياب. "أيام غياب" تُحسب من الأيام المسجّلة التي لم يُسجَّل فيها حضور ولم تُعلَّم كإجازة.
+              "ساعات غياب إضافية" مُدخلة يدوياً من المدير، منفصلة عن حساب التأخير التلقائي.
             </p>
           </>
         )}
