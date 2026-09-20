@@ -62,7 +62,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
   const behalfCandidates = backendData.employees.filter((e) => e.department === behalfDept);
   const reportingEmployee = onBehalf ? backendData.employees.find((e) => e.id === behalfEmployeeId) : ownEmployee;
   const fixedDepartment = reportingEmployee?.department || '';
-  const openProjects = backendData.projects.filter((p) => acceptsProgress(p.status));
+  const openProjects = backendData.projects
+    .filter((p) => acceptsProgress(p.status))
+    .filter((p) => isManager && !onBehalf ? true : backendData.projectAssignments.some((assignment) => assignment.project_id === p.id && assignment.employee_id === reportingEmployee?.id));
 
   const buildingsForProject = (projectId: string) => backendData.buildings.filter((b) => b.project_id === projectId);
 

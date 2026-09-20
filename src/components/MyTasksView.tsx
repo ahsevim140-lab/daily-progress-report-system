@@ -25,11 +25,14 @@ function projectProgress(tasks: ProjectTask[]) {
 }
 
 // The employee comes from the signed-in profile; no manager-only endpoint is involved.
-// A project appears here when it contains at least one task assigned to this employee.
+// A project appears here when it is assigned to this employee; only tasks from the
+// employee's department are shown.
 export const MyTasksView: React.FC<MyTasksViewProps> = ({ backendData, profile }) => {
   const employeeId = profile?.employee_id ?? null;
+  const employee = employeeId ? backendData.employees.find((item) => item.id === employeeId) : undefined;
+  const assignedProjectIds = new Set(backendData.projectAssignments.filter((assignment) => assignment.employee_id === employeeId).map((assignment) => assignment.project_id));
   const assignedTasks = employeeId
-    ? backendData.projectTasks.filter((task) => task.assigned_employee_id === employeeId)
+    ? backendData.projectTasks.filter((task) => assignedProjectIds.has(task.project_id) && task.department === employee?.department)
     : [];
 
   const assignedProjects = useMemo(() => {

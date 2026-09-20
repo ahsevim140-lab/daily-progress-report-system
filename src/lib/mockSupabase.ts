@@ -25,6 +25,7 @@ interface MockDB {
   departments: Row[];
   employees: Row[];
   projects: Row[];
+  project_assignments: Row[];
   buildings: Row[];
   areas: Row[];
   task_categories: Row[];
@@ -57,6 +58,10 @@ function seedDB(): MockDB {
 
   const project1 = { id: uid(), name: 'مشروع الأبراج السكنية', status: 'running', created_by: null };
   const projects: Row[] = [project1];
+  const project_assignments: Row[] = [
+    { id: uid(), project_id: project1.id, employee_id: employees[0]?.id },
+    { id: uid(), project_id: project1.id, employee_id: employees[1]?.id },
+  ];
 
   const building1 = { id: uid(), project_id: project1.id, name: 'المبنى A', weight_percent: 50 };
   const building2 = { id: uid(), project_id: project1.id, name: 'المبنى B', weight_percent: 50 };
@@ -131,6 +136,7 @@ function seedDB(): MockDB {
     departments: departments.map((name) => ({ id: uid(), name })),
     employees,
     projects,
+    project_assignments,
     buildings,
     areas,
     task_categories,
@@ -149,6 +155,7 @@ function loadDB(): MockDB {
     if (raw) {
       const loaded = JSON.parse(raw) as MockDB;
       loaded.attendance ||= [];
+      loaded.project_assignments ||= [];
       loaded.areas ||= [];
       loaded.task_activities ||= [];
       loaded.report_batches ||= [];
@@ -444,6 +451,7 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
     const project = db.projects.find((p) => p.id === group.project_id);
     if (!project) throw new RpcError('Project not found.');
     if (!acceptsProgress(project.status)) throw new RpcError(`Project "${project.name}" is ${project.status} and no longer accepts progress reports.`);
+    if (caller.role !== 'manager' && !db.project_assignments.some((a) => a.project_id === project.id && a.employee_id === employee!.id)) throw new RpcError(`You are not assigned to project "${project.name}".`);
     const building = db.buildings.find((b) => b.id === group.building_id);
     if (!building || building.project_id !== project.id) throw new RpcError('The selected building does not belong to the selected project.');
     if (!Array.isArray(group.lines) || group.lines.length === 0) throw new RpcError('Each project/building group requires at least one task');
@@ -454,6 +462,7 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
 
     for (const line of group.lines) {
       if (!line.department || !line.task) throw new RpcError('Each task line needs a department and a task.');
+      if (caller.role !== 'manager' && line.department !== employee.department) throw new RpcError('Employees may only report tasks from their own department.');
       const percentage = Number(line.percentage);
       if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) throw new RpcError('Percentage must be a number between 0 and 100.');
       const note = (line.note ?? '').trim() || null;

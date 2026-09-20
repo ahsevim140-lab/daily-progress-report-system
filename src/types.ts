@@ -10,6 +10,7 @@ export interface Department { id: string; name: string; active?: boolean; }
 export interface Employee { id: string; department: string; name: string; }
 export interface TaskCategory { id: string; main: string; subs: string[]; department?: string | null; }
 export interface Project { id: string; name: string; status: ProjectStatus; description?: string | null; start_date?: string | null; target_date?: string | null; created_by?: string | null; created_at?: string; }
+export interface ProjectAssignment { id: string; project_id: string; employee_id: string; assigned_by?: string | null; assigned_at?: string; }
 export interface Building { id: string; project_id: string; name: string; weight_percent: number; }
 export interface Area { id: string; building_id: string; name: string; }
 export interface ProjectTask {
@@ -26,7 +27,7 @@ export interface TaskActivity { id: string; project_task_id: string | null; empl
 // The signed-in account. employee_id ties the login to an employee record; it is never chosen by the user.
 export interface Profile { id: string; username?: string; display_name: string; role: Role; active: boolean; employee_id: string | null; team_leader_id: string | null; }
 export interface AttendanceRecord { id: string; employee_id: string; employee_name?: string; department?: string; attendance_date: string; entrance_time: string | null; status: AttendanceStatus; hours_off: number; note: string | null; created_at?: string; updated_at?: string; }
-export interface BackendData { projects: Project[]; employees: Employee[]; taskCategories: TaskCategory[]; departments: string[]; departmentRows?: Department[]; buildings: Building[]; areas: Area[]; projectTasks: ProjectTask[]; activities: TaskActivity[]; attendance: AttendanceRecord[]; }
+export interface BackendData { projects: Project[]; employees: Employee[]; projectAssignments: ProjectAssignment[]; taskCategories: TaskCategory[]; departments: string[]; departmentRows?: Department[]; buildings: Building[]; areas: Area[]; projectTasks: ProjectTask[]; activities: TaskActivity[]; attendance: AttendanceRecord[]; }
 export type ReportFlag = 'none' | 'stalled' | 'regressed';
 // A report is 1+ projects, each with 1+ buildings, each with 1+ task lines.
 export interface DraftTaskLine { id: string; category: string; task: string; percentage: string; activity: string; hoursWorked: string; blocker: string; note: string; }

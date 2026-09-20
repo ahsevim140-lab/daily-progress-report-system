@@ -12,6 +12,7 @@ import { getCurrentProfile, signOut } from './services/supabaseService';
 
 const EMPTY_DATA: BackendData = {
   projects: [],
+  projectAssignments: [],
   employees: [],
   taskCategories: [],
   departments: [],

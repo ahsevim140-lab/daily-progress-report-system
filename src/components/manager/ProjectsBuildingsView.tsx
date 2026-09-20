@@ -3,6 +3,7 @@ import { BackendData, ProjectStatus } from '../../types';
 import {
   addArea, addBuilding, addProject, addProjectTask, deleteArea, deleteBuilding,
   deleteProject, deleteProjectTask, setProjectTaskWeight, updateBuildingWeight, updateProject,
+  assignEmployeeToProject, removeEmployeeFromProject,
   updateProjectTaskDetails,
 } from '../../services/supabaseService';
 import { Briefcase, Building, Plus, Trash2, Settings2 } from 'lucide-react';
@@ -66,6 +67,24 @@ export const ProjectsBuildingsView: React.FC<{
                       </select>
                       <span className="text-[10px] text-stone-500">Configure tasks and weights before publishing.</span>
                       <button onClick={() => run(() => deleteProject(project.id), 'Project deleted.')} className="mr-auto text-stone-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+
+                    <div className="border border-[#DED2AC] rounded-xl bg-white p-3 space-y-2">
+                      <div className="text-[11px] font-bold text-[#3B4636]">Employees assigned to this project</div>
+                      <div className="flex flex-wrap gap-2">
+                        {backendData.projectAssignments.filter((assignment) => assignment.project_id === project.id).map((assignment) => {
+                          const employee = backendData.employees.find((item) => item.id === assignment.employee_id);
+                          return <span key={assignment.id} className="inline-flex items-center gap-1 px-2 py-1 bg-[#F3EDDD] border border-[#DED2AC] rounded-lg text-xs">{employee?.name || 'Unknown employee'} ({employee?.department || '—'})<button type="button" onClick={() => run(() => removeEmployeeFromProject(project.id, assignment.employee_id), 'Project assignment removed.')} className="text-red-500 mr-1">×</button></span>;
+                        })}
+                        {!backendData.projectAssignments.some((assignment) => assignment.project_id === project.id) && <span className="text-xs text-stone-500">No employees assigned yet.</span>}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <select value={drafts[`employee-${project.id}`] || ''} onChange={(e) => setDraft(`employee-${project.id}`, e.target.value)} className="bg-white border border-[#DED2AC] rounded px-2 py-1 text-xs">
+                          <option value="">Choose employee...</option>
+                          {backendData.employees.filter((employee) => !backendData.projectAssignments.some((assignment) => assignment.project_id === project.id && assignment.employee_id === employee.id)).map((employee) => <option key={employee.id} value={employee.id}>{employee.name} — {employee.department}</option>)}
+                        </select>
+                        <button type="button" onClick={() => { const employeeId = drafts[`employee-${project.id}`]; if (!employeeId) return; run(async () => { await assignEmployeeToProject(project.id, employeeId); setDraft(`employee-${project.id}`, ''); }, 'Employee assigned to project.'); }} className="bg-[#3B4636] text-white rounded px-2 py-1 text-xs">Assign employee</button>
+                      </div>
                     </div>
 
                     {buildings.map((building) => {

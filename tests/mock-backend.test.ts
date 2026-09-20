@@ -70,7 +70,7 @@ test('a building from another project is rejected, and the whole report is rolle
   await login('employee', 'employee123');
   const foreign = (await rows('buildings')).find((b) => b.project_id === ctx.otherProject.id);
   const before = { b: (await rows('report_batches')).length, a: (await rows('task_activities')).length, t: (await rows('project_tasks')).length };
-  const r = await api.rpc('submit_report', { p_groups: [group([line('d', 'good', 20)]), group([line('d', 'bad', 20)], foreign, ctx.project)] });
+  const r = await api.rpc('submit_report', { p_groups: [group([line(ctx.employees[1].department, 'good', 20)]), group([line(ctx.employees[1].department, 'bad', 20)], foreign, ctx.project)] });
   assert.match(r.error.message, /does not belong/i);
   await login('manager', 'manager123');
   assert.equal((await rows('report_batches')).length, before.b);
@@ -91,24 +91,24 @@ test('closed projects reject progress', async () => {
 
 test('a task assigned to someone else cannot be reported on', async () => {
   await login('manager', 'manager123');
-  const task = (await rows('project_tasks')).find((t) => t.building_id === ctx.building.id);
+  const task = (await rows('project_tasks')).find((t) => t.building_id === ctx.building.id && t.department === ctx.employees[1].department);
   await api.from('project_tasks').update({ assigned_employee_id: ctx.employees[2].id }).eq('id', task.id);
   await login('employee', 'employee123'); // linked to employees[1]
-  const r = await api.rpc('submit_report', { p_groups: [group([line(task.department, 'shop drawings', 40)])] });
+  const r = await api.rpc('submit_report', { p_groups: [group([line(ctx.employees[1].department, task.task || 'shop drawings', 40)])] });
   assert.match(r.error.message, /assigned to another/i);
 });
 
 test('input validation: percentage, note on no progress, and work date', async () => {
   await login('employee', 'employee123');
   const submit = (l: any, extra: any = {}) => api.rpc('submit_report', { p_groups: [group([l])], ...extra });
-  assert.match((await submit(line('d', 't', 140))).error.message, /between 0 and 100/);
-  assert.match((await submit(line('d', 't', Number.NaN))).error.message, /between 0 and 100/);
-  assert.match((await submit(line('d', 't', 0))).error.message, /reason is required/i); // new task, 0 -> 0
+  assert.match((await submit(line(ctx.employees[1].department, 't', 140))).error.message, /between 0 and 100/);
+  assert.match((await submit(line(ctx.employees[1].department, 't', Number.NaN))).error.message, /between 0 and 100/);
+  assert.match((await submit(line(ctx.employees[1].department, 't', 0))).error.message, /reason is required/i); // new task, 0 -> 0
   const tomorrow = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
-  assert.match((await submit(line('d', 't', 10), { p_work_date: tomorrow })).error.message, /today/i);
+  assert.match((await submit(line(ctx.employees[1].department, 't', 10), { p_work_date: tomorrow })).error.message, /today/i);
   const yesterday = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
-  assert.match((await submit(line('d', 't', 10), { p_work_date: yesterday })).error.message, /today/i);
-  assert.match((await submit(line('d', 't', 10), { p_work_date: 'yesterday' })).error.message, /Invalid work date/);
+  assert.match((await submit(line(ctx.employees[1].department, 't', 10), { p_work_date: yesterday })).error.message, /today/i);
+  assert.match((await submit(line(ctx.employees[1].department, 't', 10), { p_work_date: 'yesterday' })).error.message, /Invalid work date/);
 });
 
 test('activity is the single history record: linked to its line, dated by work date, flags derived', async () => {
@@ -139,9 +139,9 @@ test('activity is the single history record: linked to its line, dated by work d
 
 test('reports are readable by manager (all), team leader (own team + own), employee (own only)', async () => {
   await login('employee', 'employee123');
-  await api.rpc('submit_report', { p_groups: [group([line('d', 't1', 10)])] });
+  await api.rpc('submit_report', { p_groups: [group([line(ctx.employees[1].department, 't1', 10)])] });
   await login('leader', 'leader123');
-  await api.rpc('submit_report', { p_groups: [group([line('d', 't2', 10)])] });
+  await api.rpc('submit_report', { p_groups: [group([line(ctx.employees[0].department, 't2', 10)])] });
   await login('manager', 'manager123');
   await api.rpc('submit_report', { p_groups: [group([line('d', 't3', 10)])], p_on_behalf_of: ctx.employees[2].id });
 
