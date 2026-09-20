@@ -116,7 +116,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
         <form onSubmit={createUser} className="grid grid-cols-1 md:grid-cols-6 gap-2.5 bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-4">
           <input value={newUserDisplayName} onChange={(e) => setNewUserDisplayName(e.target.value)} placeholder="الاسم" className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs md:col-span-2" required />
           <input value={newUsername} onChange={(e) => setNewUsername(e.target.value.toLowerCase())} placeholder="اسم المستخدم" className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs" required />
-          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="كلمة المرور" className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs" minLength={6} required />
+          <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="كلمة المرور" className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs" minLength={8} required />
           <select value={newUserRole} onChange={(e) => setNewUserRole(e.target.value as Role)} className="bg-white border border-[#DED2AC] rounded-xl px-3 py-2 text-xs">
             <option value="employee">موظف</option>
             <option value="team_leader">قائد فريق</option>
@@ -191,7 +191,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
                 <button disabled={saving} onClick={() => updateUser(user, { active: !user.active }, user.active ? 'تم إيقاف المستخدم.' : 'تم تفعيل المستخدم.')} className="px-2.5 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 hover:bg-[#F3EDDD] disabled:opacity-50">
                   <UserX className="w-3.5 h-3.5 inline ml-1" />{user.active ? 'إيقاف' : 'تفعيل'}
                 </button>
-                <button disabled={saving} onClick={() => { const password = window.prompt('أدخل كلمة المرور الجديدة (6 أحرف على الأقل):'); if (password) updateUser(user, { password }, 'تم تغيير كلمة المرور.'); }} className="px-2.5 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 hover:bg-[#F3EDDD] disabled:opacity-50">
+                <button disabled={saving} onClick={() => { const password = window.prompt('أدخل كلمة المرور الجديدة (8 أحرف على الأقل):'); if (password) updateUser(user, { password }, 'تم تغيير كلمة المرور.'); }} className="px-2.5 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 hover:bg-[#F3EDDD] disabled:opacity-50">
                   <KeyRound className="w-3.5 h-3.5 inline ml-1" />تغيير كلمة المرور
                 </button>
                 <button disabled={saving} onClick={() => deleteUser(user)} className="px-2.5 py-2 rounded-lg border border-red-200 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50">
