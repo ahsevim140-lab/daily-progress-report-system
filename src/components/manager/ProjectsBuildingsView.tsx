@@ -4,7 +4,7 @@ import {
   addArea, addBuilding, addProject, addProjectTask, deleteArea, deleteBuilding,
   deleteProject, deleteProjectTask, setProjectTaskWeight, updateBuildingWeight, updateProject,
   assignEmployeeToProject, removeEmployeeFromProject,
-  updateProjectTaskDetails,
+  updateProjectTaskDetails, updateAreaSize,
 } from '../../services/supabaseService';
 import { Briefcase, Building, Plus, Trash2, Settings2 } from 'lucide-react';
 
@@ -51,13 +51,13 @@ export const ProjectsBuildingsView: React.FC<{
         <div className="space-y-4">
           {backendData.projects.map((project) => {
             const buildings = backendData.buildings.filter((b) => b.project_id === project.id);
-            const buildingWeight = buildings.reduce((sum, b) => sum + Number(b.weight_percent || 0), 0);
+            const projectArea = buildings.reduce((sum, building) => sum + backendData.areas.filter((area) => area.building_id === building.id).reduce((areaSum, area) => areaSum + Number(area.area_m2 || 0), 0), 0);
             const isOpen = openProject === project.id;
             return (
               <div key={project.id} className="border border-[#DED2AC] rounded-xl overflow-hidden">
                 <button onClick={() => setOpenProject(isOpen ? null : project.id)} className="w-full text-right bg-[#F3EDDD] p-4 flex flex-wrap justify-between items-center gap-2">
                   <span className="font-bold text-[#3B4636] flex items-center gap-2"><Briefcase className="w-4 h-4 text-[#B89B5E]" />{project.name}</span>
-                  <span className="text-xs">{statuses[project.status]} · Building weights: {buildingWeight}%</span>
+                  <span className="text-xs">{statuses[project.status]} · Total area: {projectArea} m²</span>
                 </button>
                 {isOpen && (
                   <div className="p-4 space-y-4 bg-[#FBF8EF]">
@@ -89,6 +89,9 @@ export const ProjectsBuildingsView: React.FC<{
 
                     {buildings.map((building) => {
                       const areas = backendData.areas.filter((a) => a.building_id === building.id);
+                      const buildingArea = areas.reduce((sum, area) => sum + Number(area.area_m2 || 0), 0);
+                      const projectArea = buildings.reduce((sum, item) => sum + backendData.areas.filter((area) => area.building_id === item.id).reduce((areaSum, area) => areaSum + Number(area.area_m2 || 0), 0), 0);
+                      const calculatedWeight = projectArea > 0 ? (buildingArea / projectArea) * 100 : 0;
                       const tasks = backendData.projectTasks.filter((t) => t.building_id === building.id);
                       const taskWeight = tasks.reduce((sum, t) => sum + Number(t.weight_percent || 0), 0);
                       const taskOptions = backendData.taskCategories.flatMap((c) => c.subs.map((task) => ({ task, category: c.main })));
@@ -99,19 +102,16 @@ export const ProjectsBuildingsView: React.FC<{
                         <div key={building.id} className="border border-[#DED2AC] rounded-xl p-4 space-y-3">
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <span className="font-bold text-xs text-[#3B4636] flex items-center gap-2"><Building className="w-4 h-4 text-[#B89B5E]" />{building.name}</span>
-                            <span className="text-[10px] text-stone-500">Task weights: {taskWeight}%</span>
+                            <span className="text-[10px] text-stone-500">Area: {buildingArea} m² · Project weight: {calculatedWeight.toFixed(1)}%</span>
                             <button onClick={() => run(() => deleteBuilding(building.id), 'Building deleted.')} className="text-stone-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                           </div>
-                          <label className="flex items-center gap-2 text-xs">Building weight
-                            <input type="number" min="0" max="100" defaultValue={building.weight_percent || 0} onBlur={(e) => run(() => updateBuildingWeight(building.id, Number(e.target.value)), 'Building weight saved.')} className="w-20 bg-white border border-[#DED2AC] rounded px-2 py-1" />%
-                          </label>
-
                           <div>
-                            <div className="text-[11px] font-bold text-[#3B4636] mb-2">Areas (organizational only)</div>
+                            <div className="text-[11px] font-bold text-[#3B4636] mb-2">Areas and square meters</div>
                             <div className="flex flex-wrap gap-2">
-                              {areas.map((area) => <span key={area.id} className="px-2 py-1 bg-white border border-[#DED2AC] rounded-lg text-xs">{area.name}<button onClick={() => run(() => deleteArea(area.id), 'Area deleted.')} className="text-red-500 mr-1">×</button></span>)}
-                              <form onSubmit={(e) => { e.preventDefault(); const name = drafts[areaKey]?.trim(); if (!name) return; run(async () => { await addArea(building.id, name); setDraft(areaKey, ''); }, 'Area added.'); }} className="inline-flex gap-1">
+                              {areas.map((area) => <span key={area.id} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-[#DED2AC] rounded-lg text-xs">{area.name}<input type="number" min="0" step="0.01" defaultValue={area.area_m2 || 0} onBlur={(e) => run(() => updateAreaSize(area.id, Number(e.target.value) || 0), 'Area size saved.')} className="w-16 border border-[#DED2AC] rounded px-1 py-0.5" title="Square meters" /> m²<button type="button" onClick={() => run(() => deleteArea(area.id), 'Area deleted.')} className="text-red-500 mr-1">×</button></span>)}
+                              <form onSubmit={(e) => { e.preventDefault(); const name = drafts[areaKey]?.trim(); const areaM2 = Number(drafts[`${areaKey}-m2`] || 0); if (!name || areaM2 < 0) return; run(async () => { await addArea(building.id, name, areaM2); setDraft(areaKey, ''); setDraft(`${areaKey}-m2`, ''); }, 'Area added.'); }} className="inline-flex gap-1">
                                 <input value={drafts[areaKey] || ''} onChange={(e) => setDraft(areaKey, e.target.value)} placeholder="Add area" className="w-28 bg-white border border-[#DED2AC] rounded px-2 py-1 text-xs" />
+                                <input type="number" min="0" step="0.01" value={drafts[`${areaKey}-m2`] || ''} onChange={(e) => setDraft(`${areaKey}-m2`, e.target.value)} placeholder="m²" className="w-16 bg-white border border-[#DED2AC] rounded px-2 py-1 text-xs" />
                                 <button className="text-[#3B4636]"><Plus className="w-3.5 h-3.5" /></button>
                               </form>
                             </div>

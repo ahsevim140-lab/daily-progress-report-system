@@ -45,9 +45,10 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 }
 
 export async function fetchBackendData(): Promise<BackendData> {
-  const [deptRes, empRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes] = await Promise.all([
+  const [deptRes, empRes, profileRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes] = await Promise.all([
     supabase.from('departments').select('*').order('name'),
     supabase.from('employees').select('*').order('name'),
+    supabase.from('profiles').select('username, employee_id'),
     supabase.from('projects').select('*').order('name'),
     supabase.from('project_assignments').select('*'),
     supabase.from('buildings').select('*').order('name'),
@@ -57,10 +58,11 @@ export async function fetchBackendData(): Promise<BackendData> {
     supabase.from('task_activities').select('*').order('activity_date', { ascending: false }),
     supabase.from('attendance').select('*').order('attendance_date', { ascending: false }),
   ]);
-  const firstError = [deptRes, empRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes].find((r) => r.error)?.error;
+  const firstError = [deptRes, empRes, profileRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes].find((r) => r.error)?.error;
   if (firstError) throw firstError;
   const departments = (deptRes.data || []) as Department[];
-  const employees = (empRes.data || []) as Employee[];
+  const usernames = new Map((profileRes.data || []).filter((p: any) => p.employee_id).map((p: any) => [p.employee_id, p.username]));
+  const employees = (empRes.data || []).map((employee: any) => ({ ...employee, username: usernames.get(employee.id) || null })) as Employee[];
   const attendance = (attendanceRes.data || []).map((row: any) => ({
     ...row,
     employee_name: employees.find((e) => e.id === row.employee_id)?.name,
@@ -70,7 +72,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     departments: departments.map((d) => d.name), departmentRows: departments, employees,
     projects: (projRes.data || []).map((p: any) => ({ status: 'running', ...p })) as Project[],
     projectAssignments: (assignmentRes.data || []) as ProjectAssignment[],
-    buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []) as Area[], taskCategories: (taskRes.data || []).map((cat: any) => ({ ...cat, departments: cat.departments?.length ? cat.departments : (cat.department ? [cat.department] : []) })) as TaskCategory[],
+    buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []).map((area: any) => ({ area_m2: 0, ...area })) as Area[], taskCategories: (taskRes.data || []).map((cat: any) => ({ ...cat, departments: cat.departments?.length ? cat.departments : (cat.department ? [cat.department] : []) })) as TaskCategory[],
     projectTasks: (ptRes.data || []).map((t: any) => ({ task: t.task || '', priority: 'normal', status: 'not_started', assigned_employee_name: employees.find((e) => e.id === t.assigned_employee_id)?.name, ...t })) as ProjectTask[],
     activities: (activityRes.data || []) as TaskActivity[], attendance,
   };
@@ -93,8 +95,9 @@ export async function addBuilding(projectId: string, name: string, _departments:
 export async function updateBuilding(id: string, name: string) { const { error } = await supabase.from('buildings').update({ name }).eq('id', id); if (error) throw error; }
 export async function updateBuildingWeight(id: string, weightPercent: number) { const { error } = await supabase.from('buildings').update({ weight_percent: weightPercent }).eq('id', id); if (error) throw error; }
 export async function deleteBuilding(id: string) { const { error } = await supabase.from('buildings').delete().eq('id', id); if (error) throw error; }
-export async function addArea(buildingId: string, name: string) { const { error } = await supabase.from('areas').insert({ building_id: buildingId, name }); if (error) throw error; }
+export async function addArea(buildingId: string, name: string, areaM2 = 0) { const { error } = await supabase.from('areas').insert({ building_id: buildingId, name, area_m2: areaM2 }); if (error) throw error; }
 export async function updateArea(id: string, name: string) { const { error } = await supabase.from('areas').update({ name }).eq('id', id); if (error) throw error; }
+export async function updateAreaSize(id: string, areaM2: number) { const { error } = await supabase.from('areas').update({ area_m2: areaM2 }).eq('id', id); if (error) throw error; }
 export async function deleteArea(id: string) { const { error } = await supabase.from('areas').delete().eq('id', id); if (error) throw error; }
 export async function addTaskSub(main: string, sub: string, existing: TaskCategory[]) { const match = existing.find((c) => c.main === main); const result = match ? supabase.from('task_categories').update({ subs: [...(match.subs.includes(sub) ? match.subs : [...match.subs, sub])] }).eq('id', match.id) : supabase.from('task_categories').insert({ main, subs: [sub] }); const { error } = await result; if (error) throw error; }
 export async function deleteTaskSub(category: TaskCategory, sub: string) { const newSubs = category.subs.filter((s) => s !== sub); const { error } = newSubs.length ? await supabase.from('task_categories').update({ subs: newSubs }).eq('id', category.id) : await supabase.from('task_categories').delete().eq('id', category.id); if (error) throw error; }

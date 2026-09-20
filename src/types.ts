@@ -7,12 +7,12 @@ export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 export const PROGRESS_CLOSED_STATUSES: ProjectStatus[] = ['completed', 'stopped', 'not_wanted'];
 export type AttendanceStatus = 'present' | 'late' | 'day_off' | 'hours_off' | 'absent';
 export interface Department { id: string; name: string; active?: boolean; }
-export interface Employee { id: string; department: string; name: string; }
+export interface Employee { id: string; department: string; name: string; username?: string | null; }
 export interface TaskCategory { id: string; main: string; subs: string[]; department?: string | null; departments?: string[]; is_general?: boolean; }
 export interface Project { id: string; name: string; status: ProjectStatus; description?: string | null; start_date?: string | null; target_date?: string | null; created_by?: string | null; created_at?: string; }
 export interface ProjectAssignment { id: string; project_id: string; employee_id: string; assigned_by?: string | null; assigned_at?: string; }
 export interface Building { id: string; project_id: string; name: string; weight_percent: number; }
-export interface Area { id: string; building_id: string; name: string; }
+export interface Area { id: string; building_id: string; name: string; area_m2?: number; }
 export interface ProjectTask {
   id: string; project_id: string; building_id: string; department: string; task: string; category?: string | null;
   assigned_employee_id?: string | null; assigned_employee_name?: string | null; assigned_team?: string | null;

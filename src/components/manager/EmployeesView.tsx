@@ -76,7 +76,7 @@ export const EmployeesView: React.FC<EmployeesViewProps> = ({ backendData, onRef
         <div className="space-y-1.5">
           {backendData.employees.map((emp) => (
             <div key={emp.id} className="flex items-center justify-between text-xs p-2 bg-[#F3EDDD] rounded-lg border border-[#DED2AC]">
-              <span><strong>{emp.name}</strong> <span className="text-stone-500">— {emp.department}</span></span>
+              <span><strong>{emp.name}</strong> <span className="text-stone-500">— {emp.department}</span>{emp.username && <span className="text-[#3B4636]"> · Login: @{emp.username}</span>}</span>
               <button
                 onClick={() => withSaving(async () => { await deleteEmployee(emp.id); }, 'تم حذف الموظف.')}
                 className="text-stone-400 hover:text-red-600"

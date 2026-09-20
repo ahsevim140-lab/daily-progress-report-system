@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BackendData, Role } from '../../types';
 import { manageUsers, AppUser } from '../../services/supabaseService';
-import { Plus, KeyRound, UserCog, UserX } from 'lucide-react';
+import { Plus, KeyRound, UserCog, UserX, Trash2 } from 'lucide-react';
 
 interface UsersViewProps {
   backendData: BackendData;
@@ -92,6 +92,13 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
       setSaving(false);
     }
   };
+  const deleteUser = async (user: AppUser) => {
+    if (!window.confirm(`Delete user ${user.username}? This cannot be undone.`)) return;
+    setSaving(true);
+    try { await manageUsers('delete', { id: user.id }); notify('User deleted.'); await loadUsers(); }
+    catch (err: any) { notify('Error: ' + (err.message || err)); }
+    finally { setSaving(false); }
+  };
 
   return (
     <div className="space-y-4">
@@ -148,8 +155,28 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
                     <> · فريق: {teamLeaders.find((tl) => tl.id === user.team_leader_id)?.display_name || '—'}</>
                   )}
                 </div>
+                {user.employee_id && <div className="text-[11px] text-[#3B4636] mt-1">Linked employee: {backendData.employees.find((employee) => employee.id === user.employee_id)?.name || '—'}</div>}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
+                <select
+                  disabled={saving}
+                  value={user.role}
+                  onChange={(e) => updateUser(user, { role: e.target.value as Role, team_leader_id: e.target.value === 'employee' ? user.team_leader_id : null }, 'User role updated.')}
+                  className="px-2 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 bg-white disabled:opacity-50"
+                >
+                  <option value="employee">Employee</option>
+                  <option value="team_leader">Team Leader</option>
+                  <option value="manager">Manager</option>
+                </select>
+                <select
+                  disabled={saving}
+                  value={user.employee_id || ''}
+                  onChange={(e) => updateUser(user, { employee_id: e.target.value || null }, 'Linked employee updated.')}
+                  className="px-2 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 bg-white disabled:opacity-50"
+                >
+                  <option value="">No linked employee</option>
+                  {backendData.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+                </select>
                 {user.role === 'employee' && (
                   <select
                     disabled={saving}
@@ -166,6 +193,9 @@ export const UsersView: React.FC<UsersViewProps> = ({ backendData }) => {
                 </button>
                 <button disabled={saving} onClick={() => { const password = window.prompt('أدخل كلمة المرور الجديدة (6 أحرف على الأقل):'); if (password) updateUser(user, { password }, 'تم تغيير كلمة المرور.'); }} className="px-2.5 py-2 rounded-lg border border-[#DED2AC] text-[11px] text-stone-600 hover:bg-[#F3EDDD] disabled:opacity-50">
                   <KeyRound className="w-3.5 h-3.5 inline ml-1" />تغيير كلمة المرور
+                </button>
+                <button disabled={saving} onClick={() => deleteUser(user)} className="px-2.5 py-2 rounded-lg border border-red-200 text-[11px] text-red-600 hover:bg-red-50 disabled:opacity-50">
+                  <Trash2 className="w-3.5 h-3.5 inline ml-1" />Delete user
                 </button>
               </div>
             </div>

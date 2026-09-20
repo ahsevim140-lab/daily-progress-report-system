@@ -157,7 +157,7 @@ function loadDB(): MockDB {
       const loaded = JSON.parse(raw) as MockDB;
       loaded.attendance ||= [];
       loaded.project_assignments ||= [];
-      loaded.areas ||= [];
+      loaded.areas = (loaded.areas || []).map((area) => ({ area_m2: 0, ...area }));
       loaded.task_activities ||= [];
       loaded.report_batches ||= [];
       loaded.report_lines ||= [];
@@ -180,6 +180,15 @@ function saveDB(db: MockDB) {
   } catch {
     // ignore quota errors in mock mode
   }
+}
+
+function recalculateBuildingWeights(projectId: string) {
+  const projectBuildings = db.buildings.filter((building) => building.project_id === projectId);
+  const totalArea = projectBuildings.reduce((sum, building) => sum + db.areas.filter((area) => area.building_id === building.id).reduce((areaSum, area) => areaSum + Number(area.area_m2 || 0), 0), 0);
+  projectBuildings.forEach((building) => {
+    const area = db.areas.filter((item) => item.building_id === building.id).reduce((sum, item) => sum + Number(item.area_m2 || 0), 0);
+    building.weight_percent = totalArea > 0 ? Math.round((area / totalArea) * 10000) / 100 : 0;
+  });
 }
 
 let db = loadDB();
@@ -374,6 +383,7 @@ class MockQueryBuilder {
       }));
       if (this.table === 'projects') items.forEach((item) => { item.created_by ??= currentUser()?.id ?? null; });
       (db[sourceTable] as Row[]).push(...items);
+      if (this.table === 'areas') items.forEach((item) => { const building = db.buildings.find((row) => row.id === item.building_id); if (building) recalculateBuildingWeights(building.project_id); });
       saveDB(db);
       if (this.wantsSelectAfterWrite) {
         return { data: this.wantsSingle ? items[0] : items, error: null };
@@ -384,14 +394,17 @@ class MockQueryBuilder {
     if (this.op === 'update') {
       const rows = (db[sourceTable] as Row[]).filter((r) => this.matches(r));
       rows.forEach((r) => Object.assign(r, this.payload));
+      if (this.table === 'areas') rows.forEach((item) => { const building = db.buildings.find((row) => row.id === item.building_id); if (building) recalculateBuildingWeights(building.project_id); });
       saveDB(db);
       return { data: this.wantsSelectAfterWrite ? (this.wantsSingle ? rows[0] ?? null : rows) : null, error: null };
     }
 
     if (this.op === 'delete') {
+      const removed = (db[sourceTable] as Row[]).filter((r) => this.matches(r));
       const kept = (db[sourceTable] as Row[]).filter((r) => !this.matches(r));
       const removedCount = (db[sourceTable] as Row[]).length - kept.length;
       (db as any)[sourceTable] = kept;
+      if (this.table === 'areas') removed.forEach((item) => { const building = db.buildings.find((row) => row.id === item.building_id); if (building) recalculateBuildingWeights(building.project_id); });
       // keep report_lines in sync if a batch is ever deleted (not currently exposed in UI, but safe)
       saveDB(db);
       return { data: null, error: removedCount >= 0 ? null : { message: 'Nothing deleted' } };
@@ -625,6 +638,7 @@ export const mockSupabase = {
 
       if (action === 'delete') {
         const { id } = body;
+        if (!id || id === caller.id) return { data: { error: 'You cannot delete your own account.' }, error: null };
         db.users = db.users.filter((u) => u.id !== id);
         saveDB(db);
         return { data: { ok: true }, error: null };
