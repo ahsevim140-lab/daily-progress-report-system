@@ -29,9 +29,9 @@ export interface AttendanceRecord { id: string; employee_id: string; employee_na
 export interface BackendData { projects: Project[]; employees: Employee[]; taskCategories: TaskCategory[]; departments: string[]; departmentRows?: Department[]; buildings: Building[]; areas: Area[]; projectTasks: ProjectTask[]; activities: TaskActivity[]; attendance: AttendanceRecord[]; }
 export type ReportFlag = 'none' | 'stalled' | 'regressed';
 // A report is 1+ projects, each with 1+ buildings, each with 1+ task lines.
-export interface DraftTaskLine { id: string; department: string; task: string; percentage: string; activity: string; hoursWorked: string; blocker: string; note: string; }
+export interface DraftTaskLine { id: string; category: string; task: string; percentage: string; activity: string; hoursWorked: string; blocker: string; note: string; }
 export interface DraftBuildingGroup { id: string; buildingId: string; lines: DraftTaskLine[]; }
-export interface DraftProjectGroup { id: string; projectId: string; buildings: DraftBuildingGroup[]; }
+export interface DraftProjectGroup { id: string; projectId: string; department: string; buildings: DraftBuildingGroup[]; }
 // percentage / previous_percentage / flag are read from the linked task activity, not stored on the line.
 export interface ReportLine { id: string; batch_id: string; department: string; task: string; project_task_id?: string | null; percentage: number; previous_percentage: number; flag: ReportFlag; note: string | null; }
 // work_date = the day the work was done; created_at = when the report was submitted (they can differ).

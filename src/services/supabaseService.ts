@@ -118,12 +118,9 @@ export async function submitReport(projectGroups: DraftProjectGroup[], options: 
       project_id: pg.projectId,
       building_id: bg.buildingId,
       lines: bg.lines.map((l) => ({
-        department: l.department,
+        department: pg.department,
         task: l.task,
         percentage: Number(l.percentage),
-        activity: l.activity.trim(),
-        hours_worked: l.hoursWorked ? Number(l.hoursWorked) : null,
-        blocker: l.blocker.trim() || null,
         note: l.note.trim() || null,
       })),
     }))

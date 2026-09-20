@@ -98,13 +98,11 @@ test('a task assigned to someone else cannot be reported on', async () => {
   assert.match(r.error.message, /assigned to another/i);
 });
 
-test('input validation: percentage, hours, note on no progress, description, work date', async () => {
+test('input validation: percentage, note on no progress, and work date', async () => {
   await login('employee', 'employee123');
   const submit = (l: any, extra: any = {}) => api.rpc('submit_report', { p_groups: [group([l])], ...extra });
   assert.match((await submit(line('d', 't', 140))).error.message, /between 0 and 100/);
   assert.match((await submit(line('d', 't', Number.NaN))).error.message, /between 0 and 100/);
-  assert.match((await submit(line('d', 't', 10, { hours_worked: 30 }))).error.message, /Hours/);
-  assert.match((await submit(line('d', 't', 10, { activity: '   ' }))).error.message, /description/);
   assert.match((await submit(line('d', 't', 0))).error.message, /reason is required/i); // new task, 0 -> 0
   const tomorrow = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
   assert.match((await submit(line('d', 't', 10), { p_work_date: tomorrow })).error.message, /today/i);

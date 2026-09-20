@@ -31,13 +31,13 @@ function uid() {
   return Date.now().toString() + Math.random().toString(36).slice(2);
 }
 function emptyTaskLine(): DraftTaskLine {
-  return { id: uid(), department: '', task: '', percentage: '', activity: '', hoursWorked: '', blocker: '', note: '' };
+  return { id: uid(), category: '', task: '', percentage: '', activity: '', hoursWorked: '', blocker: '', note: '' };
 }
 function emptyBuildingGroup(): DraftBuildingGroup {
   return { id: uid(), buildingId: '', lines: [emptyTaskLine()] };
 }
 function emptyProjectGroup(): DraftProjectGroup {
-  return { id: uid(), projectId: '', buildings: [emptyBuildingGroup()] };
+  return { id: uid(), projectId: '', department: '', buildings: [emptyBuildingGroup()] };
 }
 
 type LineStatus = 'up' | 'stalled' | 'regressed' | null;
@@ -65,18 +65,27 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
 
   const buildingsForProject = (projectId: string) => backendData.buildings.filter((b) => b.project_id === projectId);
 
-  const getTaskOptions = (projectId: string, buildingId: string, department: string) => {
+  const getMainTaskOptions = (projectId: string, buildingId: string, department: string) => {
     const selectedProjectTasks = backendData.projectTasks.filter(
       (t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task
     );
     if (selectedProjectTasks.length > 0) {
-      return selectedProjectTasks.map((t) => ({ id: t.id, main: t.category || department, subs: [t.task] }));
+      return [...new Set(selectedProjectTasks.map((t) => t.category || department))];
     }
-    if (!department) return backendData.taskCategories;
+    if (!department) return [];
     const matched = backendData.taskCategories.filter(
       (cat) => cat.main === department || ALWAYS_CATEGORIES.includes(cat.main)
     );
-    return matched.length > 0 ? matched : backendData.taskCategories;
+    return (matched.length > 0 ? matched : backendData.taskCategories).map((cat) => cat.main);
+  };
+
+  const getSubtaskOptions = (projectId: string, buildingId: string, department: string, category: string) => {
+    if (!department || !category) return [];
+    const selectedProjectTasks = backendData.projectTasks
+      .filter((t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task && (t.category || department) === category)
+      .map((t) => t.task);
+    if (selectedProjectTasks.length > 0) return [...new Set(selectedProjectTasks)];
+    return backendData.taskCategories.find((cat) => cat.main === category)?.subs || [];
   };
 
   // current tracked completion for a given project+building+department(+task)
@@ -88,9 +97,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
     return pt ? pt.completion_percent : 0;
   };
 
-  const lineStatus = (projectId: string, buildingId: string, line: DraftTaskLine): LineStatus => {
-    if (!line.department || line.percentage === '') return null;
-    const current = currentCompletion(projectId, buildingId, line.department, line.task);
+  const lineStatus = (projectId: string, buildingId: string, department: string, line: DraftTaskLine): LineStatus => {
+    if (!line.task || line.percentage === '') return null;
+    const current = currentCompletion(projectId, buildingId, department, line.task);
     if (current === null) return null;
     const flag = deriveFlag(current, Number(line.percentage));
     return flag === 'none' ? 'up' : flag;
@@ -103,7 +112,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
     setProjectGroups(projectGroups.filter((pg) => pg.id !== id));
   };
   const setProjectId = (id: string, projectId: string) =>
-    setProjectGroups(projectGroups.map((pg) => (pg.id === id ? { ...pg, projectId, buildings: [emptyBuildingGroup()] } : pg)));
+    setProjectGroups(projectGroups.map((pg) => (pg.id === id ? { ...pg, projectId, department: '', buildings: [emptyBuildingGroup()] } : pg)));
+  const setProjectDepartment = (id: string, department: string) =>
+    setProjectGroups(projectGroups.map((pg) => (pg.id === id ? { ...pg, department, buildings: pg.buildings.map((bg) => ({ ...bg, lines: bg.lines.map((line) => ({ ...line, category: '', task: '' })) })) } : pg)));
 
   // ---- building group mutators ----
   const addBuildingGroup = (projectGroupId: string) =>
@@ -171,8 +182,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
       return pg.buildings.every((bg) => {
         if (!bg.buildingId || bg.lines.length === 0) return false;
         return bg.lines.every((line) => {
-          if (!line.department || !line.task || line.percentage === '' || !line.activity.trim()) return false;
-          const st = lineStatus(pg.projectId, bg.buildingId, line);
+          if (!pg.department || !line.category || !line.task || line.percentage === '') return false;
+          const st = lineStatus(pg.projectId, bg.buildingId, pg.department, line);
           if ((st === 'stalled' || st === 'regressed') && !line.note.trim()) return false;
           return true;
         });
@@ -184,7 +195,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) {
-      setStatus({ type: 'err', message: 'يرجى تعبئة جميع الحقول المطلوبة، وإضافة سبب عند ثبات أو انخفاض نسبة الإنجاز.' });
+      setStatus({ type: 'err', message: 'يرجى اختيار القسم والمهمة ونسبة الإنجاز، وإضافة ملاحظة عند ثبات أو انخفاض النسبة.' });
       return;
     }
 
@@ -293,6 +304,24 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                       ))}
                     </select>
                   </div>
+                  <div className="flex-1">
+                    <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#7A7361] mb-2">
+                      <Layers className="w-3.5 h-3.5 text-[#B89B5E]" />
+                      القسم / الاختصاص
+                    </label>
+                    <select
+                      value={pg.department}
+                      onChange={(e) => setProjectDepartment(pg.id, e.target.value)}
+                      disabled={!pg.projectId}
+                      className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#B89B5E] font-medium disabled:bg-stone-100 disabled:text-stone-400"
+                      required
+                    >
+                      <option value="">{pg.projectId ? 'اختر القسم...' : 'اختر المشروع أولاً...'}</option>
+                      {backendData.departments.map((department) => (
+                        <option key={department} value={department}>{department}</option>
+                      ))}
+                    </select>
+                  </div>
                   {projectGroups.length > 1 && (
                     <button
                       type="button"
@@ -343,8 +372,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                       {/* Task lines within this building */}
                       <div className="space-y-4">
                         {bg.lines.map((line, lineIndex) => {
-                          const current = currentCompletion(pg.projectId, bg.buildingId, line.department, line.task);
-                          const st = lineStatus(pg.projectId, bg.buildingId, line);
+                          const current = currentCompletion(pg.projectId, bg.buildingId, pg.department, line.task);
+                          const st = lineStatus(pg.projectId, bg.buildingId, pg.department, line);
                           const needsNote = st === 'stalled' || st === 'regressed';
 
                           return (
@@ -381,17 +410,21 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                                 <div>
                                   <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
                                     <Layers className="w-3.5 h-3.5 text-[#B89B5E]" />
-                                    القسم / الاختصاص
+                                    المهمة الرئيسية
                                   </label>
                                   <select
-                                    value={line.department}
-                                    onChange={(e) => setLineField(pg.id, bg.id, line.id, 'department', e.target.value)}
-                                    className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
+                                    value={line.category}
+                                    onChange={(e) => {
+                                      setLineField(pg.id, bg.id, line.id, 'category', e.target.value);
+                                      setLineField(pg.id, bg.id, line.id, 'task', '');
+                                    }}
+                                    disabled={!pg.department || !bg.buildingId}
+                                    className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] disabled:bg-stone-100 disabled:text-stone-400"
                                     required
                                   >
-                                    <option value="">اختر القسم...</option>
-                                    {backendData.departments.map((d) => (
-                                      <option key={d} value={d}>{d}</option>
+                                    <option value="">{pg.department ? 'اختر المهمة الرئيسية...' : 'اختر القسم أولاً...'}</option>
+                                    {getMainTaskOptions(pg.projectId, bg.buildingId, pg.department).map((main) => (
+                                      <option key={main} value={main}>{main}</option>
                                     ))}
                                   </select>
                                 </div>
@@ -404,54 +437,15 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                                   <select
                                     value={line.task}
                                     onChange={(e) => setLineField(pg.id, bg.id, line.id, 'task', e.target.value)}
-                                    className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E]"
+                                    disabled={!line.category}
+                                    className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] disabled:bg-stone-100 disabled:text-stone-400"
                                     required
                                   >
-                                    <option value="">اختر المهمة...</option>
-                                    {getTaskOptions(pg.projectId, bg.buildingId, line.department).map((group) => (
-                                      <optgroup key={group.id} label={group.main}>
-                                        {group.subs.map((sub) => (
-                                          <option key={sub} value={sub}>{sub}</option>
-                                        ))}
-                                      </optgroup>
+                                    <option value="">{line.category ? 'اختر المهمة الفرعية...' : 'اختر المهمة الرئيسية أولاً...'}</option>
+                                    {getSubtaskOptions(pg.projectId, bg.buildingId, pg.department, line.category).map((sub) => (
+                                      <option key={sub} value={sub}>{sub}</option>
                                     ))}
                                   </select>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                <div className="md:col-span-2">
-                                  <label className="text-[11px] font-semibold text-stone-700 mb-1.5 block">What was completed today?</label>
-                                  <textarea
-                                    value={line.activity}
-                                    onChange={(e) => setLineField(pg.id, bg.id, line.id, 'activity', e.target.value)}
-                                    rows={2}
-                                    placeholder="Describe the work completed today..."
-                                    className="w-full bg-white border border-[#DED2AC] rounded-lg px-3 py-2 text-xs resize-y"
-                                    required
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[11px] font-semibold text-stone-700 mb-1.5 block">Hours worked</label>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="24"
-                                    step="0.5"
-                                    value={line.hoursWorked}
-                                    onChange={(e) => setLineField(pg.id, bg.id, line.id, 'hoursWorked', e.target.value)}
-                                    placeholder="Optional"
-                                    className="w-full bg-white border border-[#DED2AC] rounded-lg px-3 py-2 text-xs"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="text-[11px] font-semibold text-stone-700 mb-1.5 block">Blocker / issue</label>
-                                  <input
-                                    value={line.blocker}
-                                    onChange={(e) => setLineField(pg.id, bg.id, line.id, 'blocker', e.target.value)}
-                                    placeholder="Optional"
-                                    className="w-full bg-white border border-[#DED2AC] rounded-lg px-3 py-2 text-xs"
-                                  />
                                 </div>
                               </div>
 
@@ -498,37 +492,19 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                                 </div>
                               </div>
 
-                              {needsNote && (
-                                <div className="mb-4">
-                                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-red-700 mb-1.5">
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    سبب ثبات أو انخفاض النسبة (مطلوب)
-                                  </label>
-                                  <textarea
-                                    value={line.note}
-                                    onChange={(e) => setLineField(pg.id, bg.id, line.id, 'note', e.target.value)}
-                                    placeholder="اشرح سبب عدم التقدم أو انخفاض النسبة..."
-                                    rows={2}
-                                    className="w-full bg-white border border-red-300 text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-red-500 resize-y"
-                                    required
-                                  />
-                                </div>
-                              )}
-
                               <div>
-                                <label className="flex items-center gap-1.5 text-[11px] font-semibold text-stone-700 mb-1.5">
-                                  <FileText className="w-3.5 h-3.5 text-[#B89B5E]" />
-                                  ملاحظات إضافية (اختياري)
+                                <label className={`flex items-center gap-1.5 text-[11px] font-semibold mb-1.5 ${needsNote ? 'text-red-700' : 'text-stone-700'}`}>
+                                  {needsNote ? <AlertTriangle className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5 text-[#B89B5E]" />}
+                                  {needsNote ? 'ملاحظة السبب (مطلوب)' : 'ملاحظات إضافية (اختياري)'}
                                 </label>
-                                {!needsNote && (
-                                  <textarea
-                                    value={line.note}
-                                    onChange={(e) => setLineField(pg.id, bg.id, line.id, 'note', e.target.value)}
-                                    placeholder="تفاصيل إضافية عن المهمة..."
-                                    rows={2}
-                                    className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] resize-y"
-                                  />
-                                )}
+                                <textarea
+                                  value={line.note}
+                                  onChange={(e) => setLineField(pg.id, bg.id, line.id, 'note', e.target.value)}
+                                  placeholder={needsNote ? 'اشرح سبب عدم التقدم أو انخفاض النسبة...' : 'تفاصيل إضافية عن المهمة...'}
+                                  rows={2}
+                                  className={`w-full bg-white text-stone-900 rounded-lg px-3 py-2 text-xs resize-y focus:outline-none ${needsNote ? 'border border-red-300 focus:border-red-500' : 'border border-[#DED2AC] focus:border-[#B89B5E]'}`}
+                                  required={needsNote}
+                                />
                               </div>
                             </div>
                           );

@@ -413,7 +413,7 @@ function findUserByUsername(username: string) {
 // The reporting employee is NEVER taken from the request: it is the employee linked to the
 // signed-in account, unless a manager explicitly reports on someone's behalf.
 // ---------------------------------------------------------------------------
-type ReportLineInput = { department: string; task: string; percentage: number; activity: string; hours_worked?: number | null; blocker?: string | null; note?: string | null };
+type ReportLineInput = { department: string; task: string; percentage: number; note?: string | null };
 type ReportGroupInput = { project_id: string; building_id: string; lines: ReportLineInput[] };
 
 function rpcSubmitReport(params: Record<string, any>): string[] {
@@ -456,10 +456,6 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
       if (!line.department || !line.task) throw new RpcError('Each task line needs a department and a task.');
       const percentage = Number(line.percentage);
       if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) throw new RpcError('Percentage must be a number between 0 and 100.');
-      const description = (line.activity ?? '').trim();
-      if (!description) throw new RpcError('Each task line needs a description of the work done.');
-      const hours = line.hours_worked == null ? null : Number(line.hours_worked);
-      if (hours !== null && (!Number.isFinite(hours) || hours < 0 || hours > 24)) throw new RpcError('Hours worked must be between 0 and 24.');
       const note = (line.note ?? '').trim() || null;
 
       // Prefer the exact task row; fall back to the department-level placeholder row (task '').
@@ -483,8 +479,8 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
       db.task_activities.push({
         id: uid(), kind: 'report', report_line_id: lineId, project_task_id: task.id,
         employee_id: employee.id, employee_name: employee.name, recorded_by: caller.id,
-        activity_date: workDate, description, previous_percent: previous, new_percent: percentage,
-        hours_worked: hours, blocker: (line.blocker ?? '').trim() || null, note, created_at: now,
+        activity_date: workDate, description: note || 'Daily progress update', previous_percent: previous, new_percent: percentage,
+        hours_worked: null, blocker: null, note, created_at: now,
       });
       task.completion_percent = percentage;
       task.status = statusForPercent(percentage, task.status);
