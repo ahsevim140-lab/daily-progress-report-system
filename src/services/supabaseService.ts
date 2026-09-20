@@ -1,11 +1,17 @@
 import { supabase } from '../lib/supabase';
 import {
   AttendanceRecord,
+  AttendanceStatus,
   BackendData,
   Building,
-  DraftReportLine,
+  Area,
+  TaskActivity,
+  Department,
+  DraftProjectGroup,
   Employee,
+  Profile,
   Project,
+  ProjectStatus,
   ProjectTask,
   ReportBatch,
   ReportLine,
@@ -13,415 +19,120 @@ import {
   TaskCategory,
 } from '../types';
 
-// ---------------------------------------------------------------------------
-// Auth
-// ---------------------------------------------------------------------------
-function usernameEmail(username: string) {
-  return `${username.trim().toLowerCase()}@dprs.local`;
-}
+function usernameEmail(username: string) { return `${username.trim().toLowerCase()}@dprs.local`; }
 
 export async function signIn(username: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: usernameEmail(username),
-    password,
-  });
+  const { data, error } = await supabase.auth.signInWithPassword({ email: usernameEmail(username), password });
   if (error) throw error;
   return data;
 }
 
-export interface AppUser {
-  id: string;
-  username: string;
-  display_name: string;
-  role: Role;
-  active: boolean;
-  employee_id: string | null;
-  team_leader_id: string | null;
-  department: string | null;
-  created_at: string;
-}
-
+export interface AppUser { id: string; username: string; display_name: string; role: Role; active: boolean; employee_id: string | null; team_leader_id: string | null; created_at: string; }
 export async function manageUsers(action: 'list' | 'create' | 'update' | 'delete', payload: Record<string, unknown> = {}) {
-  const { data, error } = await supabase.functions.invoke('manage-user', {
-    body: { action, ...payload },
-  });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
-  return data as { users?: AppUser[]; ok?: boolean };
+  const { data, error } = await supabase.functions.invoke('manage-user', { body: { action, ...payload } });
+  if (error) throw error; if (data?.error) throw new Error(data.error); return data as { users?: AppUser[]; ok?: boolean };
 }
-
-export async function signOut() {
-  await supabase.auth.signOut();
-}
-
-export async function getCurrentRole(): Promise<Role | null> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const user = sessionData.session?.user;
-  if (!user) return null;
-
-  const { data, error } = await supabase.from('profiles').select('role, active').eq('id', user.id).single();
+export async function signOut() { await supabase.auth.signOut(); }
+// The signed-in account, including the employee record it is linked to.
+// Identity comes from the session, not from anything the user types or selects.
+// Returns null when signed out or when the account is deactivated.
+export async function getCurrentProfile(): Promise<Profile | null> {
+  const { data: sessionData } = await supabase.auth.getSession(); const user = sessionData.session?.user; if (!user) return null;
+  const { data, error } = await supabase.from('profiles').select('id, username, display_name, role, active, employee_id, team_leader_id').eq('id', user.id).single();
   if (error || !data || data.active === false) return null;
-  return data.role as Role;
+  return { id: data.id, username: data.username, display_name: data.display_name, role: data.role as Role, active: true, employee_id: data.employee_id ?? null, team_leader_id: data.team_leader_id ?? null };
 }
 
-export async function getCurrentUserId(): Promise<string | null> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  return sessionData.session?.user?.id ?? null;
-}
-
-// ---------------------------------------------------------------------------
-// Setup / config data (departments, employees, projects, buildings, tasks)
-// ---------------------------------------------------------------------------
 export async function fetchBackendData(): Promise<BackendData> {
-  const [deptRes, empRes, projRes, buildRes, taskRes, ptRes] = await Promise.all([
+  const [deptRes, empRes, projRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes] = await Promise.all([
     supabase.from('departments').select('*').order('name'),
     supabase.from('employees').select('*').order('name'),
     supabase.from('projects').select('*').order('name'),
     supabase.from('buildings').select('*').order('name'),
+    supabase.from('areas').select('*').order('name'),
     supabase.from('task_categories').select('*'),
     supabase.from('project_tasks').select('*'),
+    supabase.from('task_activities').select('*').order('activity_date', { ascending: false }),
+    supabase.from('attendance').select('*').order('attendance_date', { ascending: false }),
   ]);
-
-  const firstError = [deptRes, empRes, projRes, buildRes, taskRes, ptRes].find((r) => r.error)?.error;
+  const firstError = [deptRes, empRes, projRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes].find((r) => r.error)?.error;
   if (firstError) throw firstError;
-
+  const departments = (deptRes.data || []) as Department[];
+  const employees = (empRes.data || []) as Employee[];
+  const attendance = (attendanceRes.data || []).map((row: any) => ({
+    ...row,
+    employee_name: employees.find((e) => e.id === row.employee_id)?.name,
+    department: employees.find((e) => e.id === row.employee_id)?.department,
+  })) as AttendanceRecord[];
   return {
-    departments: (deptRes.data || []).map((d: any) => d.name),
-    employees: (empRes.data || []) as Employee[],
-    projects: (projRes.data || []) as Project[],
-    buildings: (buildRes.data || []) as Building[],
-    taskCategories: (taskRes.data || []) as TaskCategory[],
-    projectTasks: (ptRes.data || []) as ProjectTask[],
+    departments: departments.map((d) => d.name), departmentRows: departments, employees,
+    projects: (projRes.data || []).map((p: any) => ({ status: 'running', ...p })) as Project[],
+    buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []) as Area[], taskCategories: (taskRes.data || []) as TaskCategory[],
+    projectTasks: (ptRes.data || []).map((t: any) => ({ task: t.task || '', priority: 'normal', status: 'not_started', assigned_employee_name: employees.find((e) => e.id === t.assigned_employee_id)?.name, ...t })) as ProjectTask[],
+    activities: (activityRes.data || []) as TaskActivity[], attendance,
   };
 }
 
-export async function addDepartment(name: string) {
-  const { error } = await supabase.from('departments').insert({ name });
-  if (error) throw error;
-}
-
-export async function deleteDepartment(id: string) {
-  const { error } = await supabase.from('departments').delete().eq('id', id);
-  if (error) throw error;
-}
-
-export async function addEmployee(name: string, department: string) {
-  const { error } = await supabase.from('employees').insert({ name, department });
-  if (error) throw error;
-}
-
-export async function deleteEmployee(id: string) {
-  const { error } = await supabase.from('employees').delete().eq('id', id);
-  if (error) throw error;
-}
-
-export async function addProject(name: string) {
-  const { error } = await supabase.from('projects').insert({ name });
-  if (error) throw error;
-}
-
-export async function updateProject(id: string, name: string) {
-  const { error } = await supabase.from('projects').update({ name }).eq('id', id);
-  if (error) throw error;
-}
-
-export async function deleteProject(id: string) {
-  const { error } = await supabase.from('projects').delete().eq('id', id);
-  if (error) throw error;
-}
-
-// Adds a building and seeds an even default weight split across departments
-// so the manager can immediately see (and edit) the progress breakdown.
-export async function addBuilding(projectId: string, name: string, departments: string[]) {
-  const { data, error } = await supabase
-    .from('buildings')
-    .insert({ project_id: projectId, name })
-    .select()
-    .single();
-  if (error) throw error;
-
-  if (departments.length > 0) {
-    const evenWeight = Math.round((100 / departments.length) * 100) / 100;
-    const rows = departments.map((department, idx) => ({
-      project_id: projectId,
-      building_id: data.id,
-      department,
-      // give the remainder to the last row so weights sum to exactly 100
-      weight_percent: idx === departments.length - 1
-        ? Math.round((100 - evenWeight * (departments.length - 1)) * 100) / 100
-        : evenWeight,
-      completion_percent: 0,
-    }));
-    const { error: ptError } = await supabase.from('project_tasks').insert(rows);
-    if (ptError) throw ptError;
-  }
-
+export async function addDepartment(name: string) { const { error } = await supabase.from('departments').insert({ name, active: true }); if (error) throw error; }
+export async function updateDepartment(id: string, name: string) { const { error } = await supabase.from('departments').update({ name }).eq('id', id); if (error) throw error; }
+export async function deleteDepartment(id: string) { const { error } = await supabase.from('departments').delete().eq('id', id); if (error) throw error; }
+export async function addEmployee(name: string, department: string) { const { error } = await supabase.from('employees').insert({ name, department }); if (error) throw error; }
+export async function deleteEmployee(id: string) { const { error } = await supabase.from('employees').delete().eq('id', id); if (error) throw error; }
+export async function addProject(name: string, status: ProjectStatus = 'running') { const { error } = await supabase.from('projects').insert({ name, status }); if (error) throw error; }
+export async function updateProject(id: string, changes: { name?: string; status?: ProjectStatus; description?: string; start_date?: string | null; target_date?: string | null }) { const { error } = await supabase.from('projects').update(changes).eq('id', id); if (error) throw error; }
+export async function deleteProject(id: string) { const { error } = await supabase.from('projects').delete().eq('id', id); if (error) throw error; }
+export async function addBuilding(projectId: string, name: string, _departments: string[] = []) {
+  const { data, error } = await supabase.from('buildings').insert({ project_id: projectId, name, weight_percent: 0 }).select().single(); if (error) throw error;
   return data as Building;
 }
+export async function updateBuilding(id: string, name: string) { const { error } = await supabase.from('buildings').update({ name }).eq('id', id); if (error) throw error; }
+export async function updateBuildingWeight(id: string, weightPercent: number) { const { error } = await supabase.from('buildings').update({ weight_percent: weightPercent }).eq('id', id); if (error) throw error; }
+export async function deleteBuilding(id: string) { const { error } = await supabase.from('buildings').delete().eq('id', id); if (error) throw error; }
+export async function addArea(buildingId: string, name: string) { const { error } = await supabase.from('areas').insert({ building_id: buildingId, name }); if (error) throw error; }
+export async function updateArea(id: string, name: string) { const { error } = await supabase.from('areas').update({ name }).eq('id', id); if (error) throw error; }
+export async function deleteArea(id: string) { const { error } = await supabase.from('areas').delete().eq('id', id); if (error) throw error; }
+export async function addTaskSub(main: string, sub: string, existing: TaskCategory[]) { const match = existing.find((c) => c.main === main); const result = match ? supabase.from('task_categories').update({ subs: [...(match.subs.includes(sub) ? match.subs : [...match.subs, sub])] }).eq('id', match.id) : supabase.from('task_categories').insert({ main, subs: [sub] }); const { error } = await result; if (error) throw error; }
+export async function deleteTaskSub(category: TaskCategory, sub: string) { const newSubs = category.subs.filter((s) => s !== sub); const { error } = newSubs.length ? await supabase.from('task_categories').update({ subs: newSubs }).eq('id', category.id) : await supabase.from('task_categories').delete().eq('id', category.id); if (error) throw error; }
+export async function setProjectTaskWeight(id: string, weightPercent: number) { const { error } = await supabase.from('project_tasks').update({ weight_percent: weightPercent }).eq('id', id); if (error) throw error; }
+export async function setProjectTaskSelection(id: string, changes: { department: string; task: string; category?: string | null; weight_percent: number }) { const { error } = await supabase.from('project_tasks').update(changes).eq('id', id); if (error) throw error; }
+export async function updateProjectTaskDetails(id: string, changes: Partial<ProjectTask>) { const { error } = await supabase.from('project_tasks').update(changes).eq('id', id); if (error) throw error; }
+export async function addProjectTask(row: Omit<ProjectTask, 'id'>) { const { error } = await supabase.from('project_tasks').insert(row); if (error) throw error; }
+export async function deleteProjectTask(id: string) { const { error } = await supabase.from('project_tasks').delete().eq('id', id); if (error) throw error; }
+// Manager correction of a task's progress. Recorded in the task's history with a mandatory reason.
+export async function overrideTaskCompletion(id: string, completionPercent: number, reason: string) { const { error } = await supabase.rpc('override_task_completion', { p_task_id: id, p_percent: completionPercent, p_reason: reason }); if (error) throw error; }
 
-export async function updateBuilding(id: string, name: string) {
-  const { error } = await supabase.from('buildings').update({ name }).eq('id', id);
+export async function upsertAttendance(record: Omit<AttendanceRecord, 'id' | 'created_at' | 'updated_at'>) {
+  const { data: existing } = await supabase.from('attendance').select('id').eq('employee_id', record.employee_id).eq('attendance_date', record.attendance_date).single();
+  const payload = { ...record, updated_at: new Date().toISOString() };
+  const result = existing?.id ? await supabase.from('attendance').update(payload).eq('id', existing.id) : await supabase.from('attendance').insert(payload);
+  if (result.error) throw result.error;
+}
+
+// One report = several project groups, each with several buildings, each with several task lines.
+// Submitted as a single atomic call so a mid-submit failure can't leave a partial report saved.
+// Who is reporting is decided by the backend from the signed-in account; the only override is
+// onBehalfOfEmployeeId, which the backend accepts from managers only.
+export async function submitReport(projectGroups: DraftProjectGroup[], options: { workDate: string; onBehalfOfEmployeeId?: string | null }) {
+  const groups = projectGroups.flatMap((pg) =>
+    pg.buildings.map((bg) => ({
+      project_id: pg.projectId,
+      building_id: bg.buildingId,
+      lines: bg.lines.map((l) => ({
+        department: l.department,
+        task: l.task,
+        percentage: Number(l.percentage),
+        activity: l.activity.trim(),
+        hours_worked: l.hoursWorked ? Number(l.hoursWorked) : null,
+        blocker: l.blocker.trim() || null,
+        note: l.note.trim() || null,
+      })),
+    }))
+  );
+  const { data, error } = await supabase.rpc('submit_report', { p_groups: groups, p_work_date: options.workDate, p_on_behalf_of: options.onBehalfOfEmployeeId || null });
   if (error) throw error;
+  return data as string[];
 }
-
-export async function deleteBuilding(id: string) {
-  const { error } = await supabase.from('buildings').delete().eq('id', id);
-  if (error) throw error;
-}
-
-export async function addTaskSub(main: string, sub: string, existing: TaskCategory[]) {
-  const match = existing.find((c) => c.main === main);
-  if (match) {
-    if (match.subs.includes(sub)) return;
-    const { error } = await supabase
-      .from('task_categories')
-      .update({ subs: [...match.subs, sub] })
-      .eq('id', match.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from('task_categories').insert({ main, subs: [sub] });
-    if (error) throw error;
-  }
-}
-
-export async function deleteTaskSub(category: TaskCategory, sub: string) {
-  const newSubs = category.subs.filter((s) => s !== sub);
-  if (newSubs.length === 0) {
-    const { error } = await supabase.from('task_categories').delete().eq('id', category.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from('task_categories').update({ subs: newSubs }).eq('id', category.id);
-    if (error) throw error;
-  }
-}
-
-// Empty array = visible to every department. Non-empty = only those departments.
-export async function updateTaskCategoryVisibility(id: string, departments: string[]) {
-  const { error } = await supabase.from('task_categories').update({ visible_departments: departments }).eq('id', id);
-  if (error) throw error;
-}
-
-// Manager-set weight override for one project+building+department row.
-// Does NOT touch completion_percent (that only moves via submitted reports
-// or the explicit override function below).
-export async function setProjectTaskWeight(id: string, weightPercent: number) {
-  const { error } = await supabase.from('project_tasks').update({ weight_percent: weightPercent }).eq('id', id);
-  if (error) throw error;
-}
-
-// Manager manual override of a department's tracked completion for a
-// building, independent of the report log (e.g. correcting a bad entry).
-export async function overrideProjectTaskCompletion(id: string, completionPercent: number) {
-  const { error } = await supabase
-    .from('project_tasks')
-    .update({ completion_percent: completionPercent, updated_at: new Date().toISOString() })
-    .eq('id', id);
-  if (error) throw error;
-}
-
-// Add a custom progress measure (e.g. "As-Built") to a building, beyond the
-// standard department rows. Starts at 0% complete with the given weight —
-// the manager is responsible for rebalancing other weights to keep the
-// building's total at 100%.
-export async function addProjectTaskMeasure(
-  projectId: string,
-  buildingId: string,
-  name: string,
-  weightPercent: number
-) {
-  const { error } = await supabase.from('project_tasks').insert({
-    project_id: projectId,
-    building_id: buildingId,
-    department: name,
-    weight_percent: weightPercent,
-    completion_percent: 0,
-  });
-  if (error) throw error;
-}
-
-export async function deleteProjectTaskMeasure(id: string) {
-  const { error } = await supabase.from('project_tasks').delete().eq('id', id);
-  if (error) throw error;
-}
-
-// Track a specific sub-task under a real department separately, instead of
-// (or alongside) the department's shared blanket row. Once this exists, a
-// report submitted with a matching department+task updates this row
-// specifically rather than the department's shared bucket.
-export async function addProjectTaskDetail(
-  projectId: string,
-  buildingId: string,
-  department: string,
-  task: string,
-  weightPercent: number
-) {
-  const { error } = await supabase.from('project_tasks').insert({
-    project_id: projectId,
-    building_id: buildingId,
-    department,
-    task,
-    weight_percent: weightPercent,
-    completion_percent: 0,
-  });
-  if (error) throw error;
-}
-
-// ---------------------------------------------------------------------------
-// Reports
-// ---------------------------------------------------------------------------
-export async function submitReportBatch(
-  employeeName: string,
-  projectId: string,
-  buildingId: string,
-  lines: DraftReportLine[]
-) {
-  const payload = lines.map((l) => ({
-    department: l.department,
-    task: l.task,
-    percentage: Number(l.percentage),
-    note: l.note.trim() || null,
-  }));
-
-  const { data, error } = await supabase.rpc('submit_report_batch', {
-    p_employee_name: employeeName,
-    p_project_id: projectId,
-    p_building_id: buildingId,
-    p_lines: payload,
-  });
-
-  if (error) throw error;
-  return data as string; // new batch id
-}
-
 export async function fetchReportBatches(): Promise<ReportBatch[]> {
-  const { data, error } = await supabase
-    .from('report_batches')
-    .select(
-      `id, employee_name, project_id, building_id, created_at,
-       projects ( name ), buildings ( name ),
-       report_lines ( id, batch_id, department, task, percentage, previous_percentage, flag, note )`
-    )
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    employee_name: row.employee_name,
-    project_id: row.project_id,
-    building_id: row.building_id,
-    created_at: row.created_at,
-    project_name: row.projects?.name,
-    building_name: row.buildings?.name,
-    lines: (row.report_lines || []) as ReportLine[],
-  }));
-}
-
-// ---------------------------------------------------------------------------
-// Attendance
-// ---------------------------------------------------------------------------
-export async function fetchWorkStartTime(): Promise<string> {
-  const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'work_start_time').maybeSingle();
-  if (error) throw error;
-  return data?.value || '08:00';
-}
-
-export async function setWorkStartTime(value: string) {
-  const { error } = await supabase.from('app_settings').upsert({ key: 'work_start_time', value });
-  if (error) throw error;
-}
-
-export async function fetchAttendanceForDate(date: string): Promise<AttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('id, date, employee_id, arrival_time, note, is_day_off, hours_off')
-    .eq('date', date);
-  if (error) throw error;
-  return data || [];
-}
-
-export async function saveAttendanceForDate(
-  date: string,
-  records: { employee_id: string; arrival_time: string; note: string; is_day_off: boolean; hours_off: string }[]
-) {
-  // Save a row for every employee, even with empty arrival_time — an absent
-  // day needs to be explicitly recorded (arrival_time = null on a tracked
-  // date), otherwise there's no way to tell "absent" apart from "this date
-  // was never tracked at all" when building the attendance report.
-  const rows = records.map((r) => ({
-    date,
-    employee_id: r.employee_id,
-    arrival_time: r.arrival_time || null,
-    note: r.note || null,
-    is_day_off: r.is_day_off,
-    hours_off: r.hours_off ? Number(r.hours_off) : null,
-    updated_at: new Date().toISOString(),
-  }));
-
-  // Clear existing rows for this date, then insert the current set — mirrors
-  // the legacy sheet's "replace the day" save behavior.
-  const { error: deleteError } = await supabase.from('attendance').delete().eq('date', date);
-  if (deleteError) throw deleteError;
-
-  if (rows.length > 0) {
-    const { error: insertError } = await supabase.from('attendance').insert(rows);
-    if (insertError) throw insertError;
-  }
-}
-
-export async function fetchAttendanceInRange(startDate: string, endDate: string): Promise<AttendanceRecord[]> {
-  const { data, error } = await supabase
-    .from('attendance')
-    .select('id, date, employee_id, arrival_time, note, is_day_off, hours_off')
-    .gte('date', startDate)
-    .lte('date', endDate);
-  if (error) throw error;
-  return data || [];
-}
-
-// ---------------------------------------------------------------------------
-// Employee <-> project assignments
-// ---------------------------------------------------------------------------
-export interface AssignmentRow {
-  id: string;
-  employee_id: string;
-  project_id: string;
-}
-
-export async function fetchAssignments(): Promise<AssignmentRow[]> {
-  const { data, error } = await supabase.from('employee_project_assignments').select('id, employee_id, project_id');
-  if (error) throw error;
-  return data || [];
-}
-
-export async function assignEmployeeToProject(employeeId: string, projectId: string) {
-  const { error } = await supabase.from('employee_project_assignments').insert({ employee_id: employeeId, project_id: projectId });
-  if (error) throw error;
-}
-
-export async function unassignEmployeeFromProject(id: string) {
-  const { error } = await supabase.from('employee_project_assignments').delete().eq('id', id);
-  if (error) throw error;
-}
-
-// For the logged-in employee: resolve their own employee_id (via their
-// profile), then the list of projects a manager has assigned them to.
-export async function fetchMyAssignedProjectIds(): Promise<string[]> {
-  const { data: sessionData } = await supabase.auth.getSession();
-  const userId = sessionData.session?.user?.id;
-  if (!userId) return [];
-
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('employee_id')
-    .eq('id', userId)
-    .maybeSingle();
-  if (profileError || !profile?.employee_id) return [];
-
-  const { data, error } = await supabase
-    .from('employee_project_assignments')
-    .select('project_id')
-    .eq('employee_id', profile.employee_id);
-  if (error) throw error;
-  return (data || []).map((r) => r.project_id);
+  const { data, error } = await supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }); if (error) throw error;
+  return (data || []).map((row: any) => ({ id: row.id, employee_id: row.employee_id ?? null, employee_name: row.employee_name, submitted_by: row.submitted_by ?? null, project_id: row.project_id, building_id: row.building_id, work_date: row.work_date, created_at: row.created_at, project_name: row.projects?.name, building_name: row.buildings?.name, lines: (row.report_lines || []) as ReportLine[] }));
 }

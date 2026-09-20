@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { BackendData, Role } from './types';
+import { BackendData, Profile } from './types';
 import { fetchBackendData } from './services/supabaseService';
-import { supabase } from './lib/supabase';
-import logoUrl from './assets/logo.png';
+import { supabase, offlineMode } from './lib/supabase';
 import { AuthGate } from './components/AuthGate';
 import { ReportForm } from './components/ReportForm';
 import { ManagerDashboard } from './components/ManagerDashboard';
 import { TeamLeaderDashboard } from './components/TeamLeaderDashboard';
-import { EmployeeDashboard } from './components/EmployeeDashboard';
-import { FileText, ShieldCheck, LogOut, Users } from 'lucide-react';
-import { getCurrentRole, getCurrentUserId, signOut } from './services/supabaseService';
+import { MyTasksView } from './components/MyTasksView';
+import { FileText, ShieldCheck, LogOut, Users, DatabaseZap } from 'lucide-react';
+import { getCurrentProfile, signOut } from './services/supabaseService';
 
 const EMPTY_DATA: BackendData = {
   projects: [],
@@ -17,32 +16,34 @@ const EMPTY_DATA: BackendData = {
   taskCategories: [],
   departments: [],
   buildings: [],
+  areas: [],
   projectTasks: [],
+  activities: [],
+  attendance: [],
 };
 
 export default function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [authenticated, setAuthenticated] = useState(false);
-  const [role, setRole] = useState<Role | null>(null);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'form' | 'dashboard'>('form');
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const role = profile?.role ?? null;
+  const currentUserId = profile?.id ?? null;
+  const [activeTab, setActiveTab] = useState<'form' | 'dashboard' | 'tasks'>('form');
 
   const [backendData, setBackendData] = useState<BackendData>(EMPTY_DATA);
   const [dataLoading, setDataLoading] = useState(false);
   const [dataError, setDataError] = useState('');
 
   const loadEverything = async () => {
-    const currentRole = await getCurrentRole();
-    if (!currentRole) {
+    const currentProfile = await getCurrentProfile();
+    if (!currentProfile) {
       await signOut();
-      setRole(null);
-      setCurrentUserId(null);
+      setProfile(null);
       setAuthenticated(false);
       setBackendData(EMPTY_DATA);
       return;
     }
-    setRole(currentRole);
-    setCurrentUserId(await getCurrentUserId());
+    setProfile(currentProfile);
     setAuthenticated(true);
 
     setDataLoading(true);
@@ -71,8 +72,7 @@ export default function App() {
   const handleSignOut = async () => {
     await signOut();
     setAuthenticated(false);
-    setRole(null);
-    setCurrentUserId(null);
+    setProfile(null);
     setBackendData(EMPTY_DATA);
     setActiveTab('form');
   };
@@ -83,19 +83,22 @@ export default function App() {
 
   return (
     <div dir="rtl" className="min-h-screen bg-[#EFE8D6] text-[#2C2A22] font-sans antialiased selection:bg-[#B89B5E] selection:text-white">
+      {offlineMode && (
+        <div className="bg-amber-500 text-stone-900 text-[11px] font-bold py-1.5 px-4 flex items-center justify-center gap-2" role="status">
+          <DatabaseZap className="w-3.5 h-3.5" />
+          OFFLINE / DEMO MODE — data lives only in this browser and is not shared or backed up
+        </div>
+      )}
       {!authenticated && <AuthGate onAuthenticated={loadEverything} />}
 
       {authenticated && (
         <div className="min-h-screen flex flex-col">
-          <header className="relative bg-[#3B4636] text-[#F2EEDD] px-6 py-6 border-b border-[#B89B5E]/30 shadow-md overflow-hidden">
-            <img
-              src={logoUrl}
-              alt="شعار"
-              className="hidden md:block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 object-contain pointer-events-none opacity-95"
-            />
+          <header className="relative bg-[#3B4636] text-[#F2EEDD] px-6 py-6 border-b border-[#B89B5E]/30 shadow-md">
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3 text-center md:text-right">
-                <img src={logoUrl} alt="شعار" className="w-10 h-10 object-contain md:hidden" />
+              <div className="flex items-center gap-4 text-center md:text-right">
+                <div className="w-12 h-12 rounded-xl bg-[#B89B5E]/20 border border-[#B89B5E]/50 flex items-center justify-center text-[#D8C48F] shrink-0">
+                  <FileText className="w-6 h-6 text-[#D8C48F]" />
+                </div>
                 <div>
                   <h1 className="font-serif text-2xl font-bold tracking-tight text-[#EFE8D6]">
                     سجل التقارير اليومية
@@ -107,7 +110,7 @@ export default function App() {
               </div>
 
               <div className="flex items-center gap-3">
-                {(role === 'manager' || role === 'team_leader' || role === 'employee') && (
+                {role && (
                   <div className="flex items-center gap-2 bg-[#2C2A22]/50 p-1.5 rounded-xl border border-[#B89B5E]/30 shadow-inner">
                     <button
                       onClick={() => setActiveTab('form')}
@@ -118,15 +121,21 @@ export default function App() {
                       <FileText className="w-3.5 h-3.5" />
                       <span>نموذج التقرير</span>
                     </button>
-                    <button
+                    {role === 'employee' && <button
+                      onClick={() => setActiveTab('tasks')}
+                      className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${activeTab === 'tasks' ? 'bg-[#B89B5E] text-[#2C2A22] font-bold' : 'text-[#F2EEDD] hover:bg-white/10'}`}
+                    >
+                      <Users className="w-3.5 h-3.5" /><span>My Projects</span>
+                    </button>}
+                    {role !== 'employee' && <button
                       onClick={() => setActiveTab('dashboard')}
                       className={`px-4 py-2 rounded-lg text-xs font-medium transition-all flex items-center gap-2 ${
                         activeTab === 'dashboard' ? 'bg-[#B89B5E] text-[#2C2A22] font-bold' : 'text-[#F2EEDD] hover:bg-white/10'
                       }`}
                     >
                       {role === 'manager' ? <ShieldCheck className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
-                      <span>{role === 'manager' ? 'لوحة المدير' : role === 'team_leader' ? 'لوحة قائد الفريق' : 'مشاريعي'}</span>
-                    </button>
+                      <span>{role === 'manager' ? 'Manager Dashboard' : 'Team Leader Dashboard'}</span>
+                    </button>}
                   </div>
                 )}
 
@@ -155,21 +164,21 @@ export default function App() {
               <div className="text-center text-xs text-stone-500 py-16">جارٍ تحميل البيانات...</div>
             ) : activeTab === 'form' || !role ? (
               <div className="max-w-3xl mx-auto">
-                <ReportForm backendData={backendData} />
+                <ReportForm backendData={backendData} profile={profile} />
               </div>
+            ) : activeTab === 'tasks' && role === 'employee' ? (
+              <MyTasksView backendData={backendData} profile={profile} />
             ) : role === 'manager' ? (
               <ManagerDashboard backendData={backendData} onRefreshData={loadEverything} />
-            ) : role === 'team_leader' ? (
-              <TeamLeaderDashboard backendData={backendData} currentUserId={currentUserId} onRefreshData={loadEverything} />
             ) : (
-              <EmployeeDashboard backendData={backendData} onRefreshData={loadEverything} />
+              <TeamLeaderDashboard backendData={backendData} currentUserId={currentUserId} onRefreshData={loadEverything} />
             )}
           </main>
 
           <footer className="bg-[#2C2A22] text-[#D8C48F]/80 text-xs py-4 px-6 border-t border-[#B89B5E]/30 text-center">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
               <span>جميع الحقوق محفوظة © {new Date().getFullYear()} - نظام إدارة المتابعة والتقارير اليومية</span>
-              <span className="text-[11px] text-[#D8C48F]/60 font-mono">ENG LOG v4.0 • Supabase</span>
+              <span className="text-[11px] text-[#D8C48F]/60 font-mono">ENG LOG v5.0 • {offlineMode ? 'Offline model' : 'Supabase'}</span>
             </div>
           </footer>
         </div>

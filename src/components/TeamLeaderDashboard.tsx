@@ -18,8 +18,11 @@ export const TeamLeaderDashboard: React.FC<TeamLeaderDashboardProps> = ({ backen
   const [subTab, setSubTab] = useState<SubTab>('reports');
 
   // "My projects" scope: only projects this team leader created, and
-  // everything hanging off them. Reports are already scoped server-side
-  // (own team OR own projects) by RLS, so ReportsView needs no filtering.
+  // everything hanging off them. Reports are scoped by the backend (own
+  // team, own projects, own reports) — in offline mode that rule lives in
+  // src/lib/mockSupabase.ts (canReadBatch), so ReportsView needs no filtering.
+  // Note: "created by me" is not the same as "led by me"; a proper project
+  // membership model is still to do.
   const myBackendData: BackendData = useMemo(() => {
     const myProjectIds = new Set(
       backendData.projects.filter((p) => p.created_by === currentUserId).map((p) => p.id)

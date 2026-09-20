@@ -1,0 +1,18 @@
+import React, { useMemo } from 'react';
+import { BackendData } from '../../types';
+import { todayLocalYMD } from '../../utils';
+import { AlertTriangle, CheckCircle2, Clock3, Users } from 'lucide-react';
+
+function ageInDays(value?: string) { if (!value) return 999; return Math.floor((Date.now() - new Date(value).getTime()) / 86400000); }
+export const HealthView: React.FC<{ backendData: BackendData }> = ({ backendData }) => {
+  const today = todayLocalYMD();
+  const health = useMemo(() => backendData.projects.map((project) => {
+    const tasks = backendData.projectTasks.filter((t) => t.project_id === project.id);
+    const overdue = tasks.filter((t) => t.planned_finish && t.planned_finish < today && t.status !== 'completed' && t.status !== 'cancelled');
+    const blocked = tasks.filter((t) => t.status === 'blocked');
+    const stale = tasks.filter((t) => ageInDays(t.updated_at) > 3 && t.status !== 'completed' && t.status !== 'cancelled');
+    const employees = new Set(tasks.map((t) => t.assigned_employee_id).filter(Boolean));
+    return { project, tasks, overdue, blocked, stale, employees };
+  }), [backendData, today]);
+  return <div className="space-y-5"><div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5"><h3 className="font-serif font-bold text-[#3B4636] mb-1">Project health</h3><p className="text-xs text-stone-500">A management view of work requiring attention.</p></div>{health.map(({ project, tasks, overdue, blocked, stale, employees }) => <div key={project.id} className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 space-y-4"><div className="flex justify-between items-center"><div><h4 className="font-bold text-[#3B4636]">{project.name}</h4><span className="text-[10px] text-stone-500">{project.status}</span></div><span className="text-xs text-stone-500">{tasks.filter((t) => t.status === 'completed').length} / {tasks.length} completed</span></div><div className="grid grid-cols-2 md:grid-cols-4 gap-2"><div className="p-3 rounded-xl bg-red-50 border border-red-200"><div className="flex gap-1 text-red-700 text-[11px]"><AlertTriangle className="w-3.5 h-3.5" />Overdue</div><strong className="text-xl text-red-800">{overdue.length}</strong></div><div className="p-3 rounded-xl bg-amber-50 border border-amber-200"><div className="flex gap-1 text-amber-700 text-[11px]"><Clock3 className="w-3.5 h-3.5" />No update 3+ days</div><strong className="text-xl text-amber-800">{stale.length}</strong></div><div className="p-3 rounded-xl bg-orange-50 border border-orange-200"><div className="flex gap-1 text-orange-700 text-[11px]"><AlertTriangle className="w-3.5 h-3.5" />Blocked</div><strong className="text-xl text-orange-800">{blocked.length}</strong></div><div className="p-3 rounded-xl bg-blue-50 border border-blue-200"><div className="flex gap-1 text-blue-700 text-[11px]"><Users className="w-3.5 h-3.5" />Assigned staff</div><strong className="text-xl text-blue-800">{employees.size}</strong></div></div><div className="space-y-2">{[...overdue, ...blocked, ...stale].slice(0, 8).map((task) => <div key={`${task.id}-${task.status}`} className="flex flex-wrap justify-between gap-2 text-xs bg-[#F3EDDD] border border-[#DED2AC] rounded-lg p-2"><span>{task.department} — {task.task || 'Unassigned task'}</span><span className="text-stone-500">{task.status}{task.planned_finish ? ` · due ${task.planned_finish}` : ''}</span></div>)}{!overdue.length && !blocked.length && !stale.length && <div className="text-xs text-emerald-700 flex gap-1 items-center"><CheckCircle2 className="w-4 h-4" />No attention items detected.</div>}</div></div>)}{!health.length && <div className="text-center text-xs text-stone-500 py-10">No projects available.</div>}</div>;
+};

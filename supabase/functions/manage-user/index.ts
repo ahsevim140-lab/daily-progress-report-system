@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
     if (action === 'list') {
       const { data: profiles, error } = await admin
         .from('profiles')
-        .select('id, username, display_name, role, active, employee_id, team_leader_id, department, created_at')
+        .select('id, username, display_name, role, active, employee_id, team_leader_id, created_at')
         .order('display_name', { ascending: true });
       if (error) throw error;
       return json({ users: profiles || [] });
@@ -73,7 +73,6 @@ Deno.serve(async (req) => {
       const role = ['manager', 'team_leader'].includes(body.role) ? body.role : 'employee';
       const employeeId = body.employee_id || null;
       const teamLeaderId = role === 'employee' ? (body.team_leader_id || null) : null;
-      const department = body.department ? String(body.department).trim() : null;
 
       if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
         return json({ error: 'Username must be 3–32 characters and use only letters, numbers, dot, dash, or underscore.' }, 400);
@@ -101,7 +100,7 @@ Deno.serve(async (req) => {
 
       const { error: profileError } = await admin
         .from('profiles')
-        .update({ username, display_name: displayName, role, active: true, employee_id: employeeId, team_leader_id: teamLeaderId, department })
+        .update({ username, display_name: displayName, role, active: true, employee_id: employeeId, team_leader_id: teamLeaderId })
         .eq('id', created.user.id);
 
       if (profileError) {
@@ -120,7 +119,6 @@ Deno.serve(async (req) => {
       const teamLeaderId = role === 'employee' ? (body.team_leader_id || null) : null;
       const active = body.active !== false;
       const password = body.password ? String(body.password) : '';
-      const department = body.department ? String(body.department).trim() : null;
 
       if (!id || !displayName) return json({ error: 'User and display name are required.' }, 400);
       if (password && password.length < 6) return json({ error: 'Password must be at least 6 characters.' }, 400);
@@ -134,7 +132,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      const { error: profileError } = await admin.from('profiles').update({ display_name: displayName, role, active, employee_id: employeeId, team_leader_id: teamLeaderId, department }).eq('id', id);
+      const { error: profileError } = await admin.from('profiles').update({ display_name: displayName, role, active, employee_id: employeeId, team_leader_id: teamLeaderId }).eq('id', id);
       if (profileError) throw profileError;
 
       if (password) {

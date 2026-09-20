@@ -1,96 +1,39 @@
 export type Role = 'employee' | 'manager' | 'team_leader';
-
-export interface Employee {
-  id: string;
-  department: string;
-  name: string;
-}
-
-export interface TaskCategory {
-  id: string;
-  main: string;
-  subs: string[];
-  visible_departments: string[];
-}
-
-export interface EmployeeProjectAssignment {
-  id: string;
-  employee_id: string;
-  project_id: string;
-}
-
-export interface Project {
-  id: string;
-  name: string;
-  created_by?: string | null;
-}
-
-export interface AttendanceRecord {
-  id?: string;
-  date: string;
-  employee_id: string;
-  arrival_time: string | null;
-  note: string | null;
-  is_day_off: boolean;
-  hours_off: number | null;
-}
-
-export interface Building {
-  id: string;
-  project_id: string;
-  name: string;
-}
-
-// One row per project + building + department: the weighted progress model
+export type ProjectStatus = 'draft' | 'ready' | 'running' | 'stopped' | 'not_wanted' | 'completed';
+export type TaskStatus = 'not_started' | 'in_progress' | 'blocked' | 'under_review' | 'revision_required' | 'completed' | 'cancelled' | 'on_hold';
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+// Projects in these statuses no longer accept daily progress. Shared by the report form
+// (hides them) and the backend (rejects them) so the two cannot drift apart.
+export const PROGRESS_CLOSED_STATUSES: ProjectStatus[] = ['completed', 'stopped', 'not_wanted'];
+export type AttendanceStatus = 'present' | 'late' | 'day_off' | 'hours_off' | 'absent';
+export interface Department { id: string; name: string; active?: boolean; }
+export interface Employee { id: string; department: string; name: string; }
+export interface TaskCategory { id: string; main: string; subs: string[]; department?: string | null; }
+export interface Project { id: string; name: string; status: ProjectStatus; description?: string | null; start_date?: string | null; target_date?: string | null; created_by?: string | null; created_at?: string; }
+export interface Building { id: string; project_id: string; name: string; weight_percent: number; }
+export interface Area { id: string; building_id: string; name: string; }
 export interface ProjectTask {
-  id: string;
-  project_id: string;
-  building_id: string;
-  department: string;
-  task: string | null;
-  weight_percent: number;
-  completion_percent: number;
+  id: string; project_id: string; building_id: string; department: string; task: string; category?: string | null;
+  assigned_employee_id?: string | null; assigned_employee_name?: string | null; assigned_team?: string | null;
+  priority: TaskPriority; status: TaskStatus; planned_start?: string | null; planned_finish?: string | null;
+  actual_start?: string | null; actual_finish?: string | null; weight_percent: number; completion_percent: number; updated_at?: string;
 }
-
-export interface BackendData {
-  projects: Project[];
-  employees: Employee[];
-  taskCategories: TaskCategory[];
-  departments: string[];
-  buildings: Building[];
-  projectTasks: ProjectTask[];
-}
-
+// task_activities is the single authoritative history of a task's progress.
+// kind 'report' = produced by a submitted report line (report_line_id links back to it);
+// kind 'override' = a manager correction, always carrying a reason and who made it.
+export type ActivityKind = 'report' | 'override';
+export interface TaskActivity { id: string; project_task_id: string | null; employee_id?: string | null; employee_name?: string | null; activity_date: string; description: string; previous_percent: number; new_percent: number; hours_worked?: number | null; blocker?: string | null; note?: string | null; created_at?: string; kind?: ActivityKind; report_line_id?: string | null; recorded_by?: string | null; reason?: string | null; }
+// The signed-in account. employee_id ties the login to an employee record; it is never chosen by the user.
+export interface Profile { id: string; username?: string; display_name: string; role: Role; active: boolean; employee_id: string | null; team_leader_id: string | null; }
+export interface AttendanceRecord { id: string; employee_id: string; employee_name?: string; department?: string; attendance_date: string; entrance_time: string | null; status: AttendanceStatus; hours_off: number; note: string | null; created_at?: string; updated_at?: string; }
+export interface BackendData { projects: Project[]; employees: Employee[]; taskCategories: TaskCategory[]; departments: string[]; departmentRows?: Department[]; buildings: Building[]; areas: Area[]; projectTasks: ProjectTask[]; activities: TaskActivity[]; attendance: AttendanceRecord[]; }
 export type ReportFlag = 'none' | 'stalled' | 'regressed';
-
-// One task line inside a report batch, as filled in the form (pre-submit)
-export interface DraftReportLine {
-  id: string; // local-only key for React lists
-  department: string;
-  task: string;
-  percentage: string; // kept as string while editing, parsed on submit
-  note: string;
-}
-
-// One task line as stored/returned by the database (post-submit)
-export interface ReportLine {
-  id: string;
-  batch_id: string;
-  department: string;
-  task: string;
-  percentage: number;
-  previous_percentage: number;
-  flag: ReportFlag;
-  note: string | null;
-}
-
-export interface ReportBatch {
-  id: string;
-  employee_name: string;
-  project_id: string;
-  building_id: string;
-  created_at: string;
-  project_name?: string;
-  building_name?: string;
-  lines: ReportLine[];
-}
+// A report is 1+ projects, each with 1+ buildings, each with 1+ task lines.
+export interface DraftTaskLine { id: string; department: string; task: string; percentage: string; activity: string; hoursWorked: string; blocker: string; note: string; }
+export interface DraftBuildingGroup { id: string; buildingId: string; lines: DraftTaskLine[]; }
+export interface DraftProjectGroup { id: string; projectId: string; buildings: DraftBuildingGroup[]; }
+// percentage / previous_percentage / flag are read from the linked task activity, not stored on the line.
+export interface ReportLine { id: string; batch_id: string; department: string; task: string; project_task_id?: string | null; percentage: number; previous_percentage: number; flag: ReportFlag; note: string | null; }
+// work_date = the day the work was done; created_at = when the report was submitted (they can differ).
+// employee_id is the reporting employee; submitted_by is the account that pressed submit (differs when a manager reports on someone's behalf).
+export interface ReportBatch { id: string; employee_id?: string | null; employee_name: string; submitted_by?: string | null; project_id: string; building_id: string; work_date: string; created_at: string; project_name?: string; building_name?: string; lines: ReportLine[]; }

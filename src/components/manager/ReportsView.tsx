@@ -1,20 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { BackendData, ReportBatch } from '../../types';
 import { fetchReportBatches } from '../../services/supabaseService';
-import { formatArabicDate, toLocalYMD, exportBatchesToCSV, exportBatchesToPDF } from '../../utils';
-import logoUrl from '../../assets/logo.png';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { formatArabicDate, toLocalYMD, exportBatchesToCSV } from '../../utils';
 import {
   RefreshCw,
   Search,
   Download,
-  FileDown,
   ChevronDown,
   ChevronUp,
   AlertTriangle,
   TrendingDown,
   Minus,
-  Hourglass,
 } from 'lucide-react';
 
 interface ReportsViewProps {
@@ -59,7 +55,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
   const filtered = useMemo(() => {
     return batches.filter((b) => {
       if (filterProject && b.project_id !== filterProject) return false;
-      if (filterDate && toLocalYMD(b.created_at) !== filterDate) return false;
+      if (filterDate && b.work_date !== filterDate) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const combined = `${b.employee_name} ${b.project_name} ${b.building_name} ${b.lines
@@ -83,23 +79,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
       : severity === 'stalled'
       ? 'bg-amber-50 border-amber-200'
       : 'bg-white border-[#DED2AC]';
-
-  const handleExportPDF = async () => {
-    let logoDataUrl = '';
-    try {
-      const res = await fetch(logoUrl);
-      const blob = await res.blob();
-      logoDataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-    } catch {
-      // fall back to no logo if it can't be loaded
-    }
-    exportBatchesToPDF(filtered, logoDataUrl);
-  };
 
   return (
     <div className="space-y-4">
@@ -148,14 +127,6 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
           <Download className="w-3.5 h-3.5" />
           تصدير CSV
         </button>
-
-        <button
-          onClick={handleExportPDF}
-          className="px-3 py-1.5 bg-white border border-[#DED2AC] text-[#3B4636] rounded-lg text-xs font-medium flex items-center gap-1.5"
-        >
-          <FileDown className="w-3.5 h-3.5" />
-          تصدير PDF
-        </button>
       </div>
 
       {error && (
@@ -184,7 +155,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
                 <div className="flex items-center gap-3 text-xs">
                   {severity === 'regressed' && <TrendingDown className="w-4 h-4 text-red-600 shrink-0" />}
                   {severity === 'stalled' && <Minus className="w-4 h-4 text-amber-600 shrink-0" />}
-                  <span className="font-mono text-stone-500 whitespace-nowrap">{formatArabicDate(b.created_at)}</span>
+                  <span className="font-mono text-stone-500 whitespace-nowrap" title="تاريخ العمل">{b.work_date}</span>
+                  {b.work_date !== toLocalYMD(b.created_at) && (
+                    <span className="text-[10px] text-stone-400 whitespace-nowrap" title="وقت الإرسال">أُرسل {formatArabicDate(b.created_at)}</span>
+                  )}
                   <span className="font-bold text-stone-900">{b.employee_name}</span>
                   <span className="text-stone-700">{b.project_name}</span>
                   <span className="text-stone-500">/ {b.building_name}</span>

@@ -77,7 +77,7 @@ export const ProjectsView: React.FC<ProjectsViewProps> = ({ backendData, onRefre
                     <button
                       disabled={saving || !editingName.trim()}
                       onClick={() => withSaving(async () => {
-                        await updateProject(p.id, editingName.trim());
+                        await updateProject(p.id, { name: editingName.trim() });
                         setEditingId(null);
                       }, 'تم تحديث اسم المشروع.')}
                       className="text-emerald-600 hover:text-emerald-800"
