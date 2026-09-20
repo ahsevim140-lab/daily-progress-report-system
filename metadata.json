@@ -1,6 +1,0 @@
-{
-  "name": "Daily Progress Report System",
-  "description": "سجل التقارير اليومية - نظام إدارة المتابعة والتقارير اليومية للمشاريع والمهام والأقسام",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
