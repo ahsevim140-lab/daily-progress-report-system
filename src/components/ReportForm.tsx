@@ -69,17 +69,16 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
   const buildingsForProject = (projectId: string) => backendData.buildings.filter((b) => b.project_id === projectId);
 
   const getMainTaskOptions = (projectId: string, buildingId: string, department: string) => {
+    const allowedCategories = backendData.taskCategories.filter((cat) => cat.department === department || ALWAYS_CATEGORIES.includes(cat.main));
+    const allowedNames = new Set(allowedCategories.map((cat) => cat.main));
     const selectedProjectTasks = backendData.projectTasks.filter(
-      (t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task
+      (t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task && allowedNames.has(t.category || department)
     );
     if (selectedProjectTasks.length > 0) {
       return [...new Set(selectedProjectTasks.map((t) => t.category || department))];
     }
     if (!department) return [];
-    const matched = backendData.taskCategories.filter(
-      (cat) => cat.main === department || ALWAYS_CATEGORIES.includes(cat.main)
-    );
-    return (matched.length > 0 ? matched : backendData.taskCategories).map((cat) => cat.main);
+    return allowedCategories.map((cat) => cat.main);
   };
 
   const getSubtaskOptions = (projectId: string, buildingId: string, department: string, category: string) => {
@@ -88,7 +87,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
       .filter((t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task && (t.category || department) === category)
       .map((t) => t.task);
     if (selectedProjectTasks.length > 0) return [...new Set(selectedProjectTasks)];
-    return backendData.taskCategories.find((cat) => cat.main === category)?.subs || [];
+    const selectedCategory = backendData.taskCategories.find((cat) => cat.main === category && (cat.department === department || ALWAYS_CATEGORIES.includes(cat.main)));
+    return selectedCategory?.subs || [];
   };
 
   // current tracked completion for a given project+building+department(+task)

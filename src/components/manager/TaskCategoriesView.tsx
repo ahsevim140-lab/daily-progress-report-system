@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BackendData } from '../../types';
-import { addTaskSub, deleteTaskSub } from '../../services/supabaseService';
+import { addTaskSub, deleteTaskSub, setTaskCategoryDepartment } from '../../services/supabaseService';
 import { Plus, ListTodo, Trash2 } from 'lucide-react';
 
 interface TaskCategoriesViewProps {
@@ -70,7 +70,15 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
         <div className="space-y-3">
           {backendData.taskCategories.map((cat) => (
             <div key={cat.id} className="bg-[#F3EDDD] border border-[#DED2AC] p-4 rounded-xl space-y-2">
-              <div className="text-xs font-bold text-[#3B4636]">{cat.main}</div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-xs font-bold text-[#3B4636]">{cat.main}</div>
+                <label className="text-[11px] text-stone-600">Visible for department
+                  <select value={cat.department || ''} onChange={(e) => withSaving(() => setTaskCategoryDepartment(cat.id, e.target.value || null), 'Category department updated.')} className="mr-2 bg-white border border-[#DED2AC] rounded px-2 py-1 text-xs">
+                    <option value="">Unassigned</option>
+                    {backendData.departments.map((department) => <option key={department} value={department}>{department}</option>)}
+                  </select>
+                </label>
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {cat.subs.map((sub) => (
                   <span key={sub} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-[#DED2AC] rounded-lg text-xs">

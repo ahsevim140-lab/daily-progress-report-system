@@ -72,8 +72,8 @@ function seedDB(): MockDB {
   ];
 
   const task_categories: Row[] = [
-    { id: uid(), main: 'أعمال الحفر', subs: ['حفر أساسات', 'ردم'] },
-    { id: uid(), main: 'أعمال الخرسانة', subs: ['صب أعمدة', 'صب أسقف'] },
+    { id: uid(), main: 'أعمال الحفر', department: departments[0], subs: ['حفر أساسات', 'ردم'] },
+    { id: uid(), main: 'أعمال الخرسانة', department: departments[1], subs: ['صب أعمدة', 'صب أسقف'] },
   ];
 
   const project_tasks: Row[] = [];
