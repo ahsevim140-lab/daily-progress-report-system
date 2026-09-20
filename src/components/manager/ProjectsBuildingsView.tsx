@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { BackendData, ProjectStatus } from '../../types';
 import {
   addArea, addBuilding, addProject, addProjectTask, deleteArea, deleteBuilding,
-  deleteProject, deleteProjectTask, setProjectTaskWeight, updateBuildingWeight, updateProject,
+  deleteProject, deleteProjectTask, setProjectTaskWeight, updateProject,
   assignEmployeeToProject, removeEmployeeFromProject,
   updateProjectTaskDetails, updateAreaSize,
 } from '../../services/supabaseService';
@@ -106,7 +106,8 @@ export const ProjectsBuildingsView: React.FC<{
                             <button onClick={() => run(() => deleteBuilding(building.id), 'Building deleted.')} className="text-stone-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                           </div>
                           <div>
-                            <div className="text-[11px] font-bold text-[#3B4636] mb-2">Areas and square meters</div>
+                            <div className="text-[11px] font-bold text-[#3B4636] mb-1">Areas and square meters</div>
+                            <div className="text-[10px] text-stone-500 mb-2">Enter each area and its size once. The building percentage is calculated automatically from the total project area.</div>
                             <div className="flex flex-wrap gap-2">
                               {areas.map((area) => <span key={area.id} className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-[#DED2AC] rounded-lg text-xs">{area.name}<input type="number" min="0" step="0.01" defaultValue={area.area_m2 || 0} onBlur={(e) => run(() => updateAreaSize(area.id, Number(e.target.value) || 0), 'Area size saved.')} className="w-16 border border-[#DED2AC] rounded px-1 py-0.5" title="Square meters" /> m²<button type="button" onClick={() => run(() => deleteArea(area.id), 'Area deleted.')} className="text-red-500 mr-1">×</button></span>)}
                               <form onSubmit={(e) => { e.preventDefault(); const name = drafts[areaKey]?.trim(); const areaM2 = Number(drafts[`${areaKey}-m2`] || 0); if (!name || areaM2 < 0) return; run(async () => { await addArea(building.id, name, areaM2); setDraft(areaKey, ''); setDraft(`${areaKey}-m2`, ''); }, 'Area added.'); }} className="inline-flex gap-1">
