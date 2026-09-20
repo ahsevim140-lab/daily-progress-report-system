@@ -4,11 +4,11 @@ import { mockSupabase } from './mockSupabase';
 // ---------------------------------------------------------------------------
 // Offline mode switch
 //
-// This build is an OFFLINE MODEL: left unset (or "true"), the app runs
-// entirely against an in-memory/localStorage mock — no network, no Supabase
-// project required — and the UI shows a permanent OFFLINE banner.
-// Real-Supabase mode (VITE_OFFLINE_MODE=false) is NOT kept in step with the
-// offline model yet (see README, "Offline scope"). Default seeded logins:
+// Left unset (or "true"), the app runs entirely against an in-memory/localStorage
+// mock — no network, no Supabase project required — and the UI shows a permanent
+// OFFLINE banner. VITE_OFFLINE_MODE=false uses the real Supabase project (the
+// GitHub Pages deploy builds this way). Offline-only seeded logins (they do not
+// exist in the real project):
 //   manager  / manager123    (manager role, not linked to an employee)
 //   leader   / leader123     (team_leader role, linked to an employee)
 //   employee / employee123   (employee role, in the leader's team)

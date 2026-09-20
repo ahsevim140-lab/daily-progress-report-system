@@ -1,9 +1,14 @@
 # Daily Progress Report System
 
-> **Current scope: offline model.** The app runs entirely in the browser against
-> `src/lib/mockSupabase.ts`, and shows an OFFLINE / DEMO banner. In this mode the mock **is**
-> the database, so the rules below are enforced there and covered by `npm test`.
-> Real-Supabase mode (`VITE_OFFLINE_MODE=false`) has **not** been brought in step yet.
+> **Two modes.** The app runs either against a Supabase project (**online**) or entirely in the
+> browser against `src/lib/mockSupabase.ts` (**offline**, with an OFFLINE / DEMO banner).
+> The mode is chosen at build time by `VITE_OFFLINE_MODE`: unset or `true` = offline mock,
+> `false` = real Supabase. The GitHub Pages deploy (`.github/workflows/deploy.yml`) builds with
+> `VITE_OFFLINE_MODE=false`, so the published site is the **online** app. `launch.bat` and
+> `npm run dev` without an `.env.local` run the **offline** mock.
+> In offline mode the mock **is** the database, so the rules below are enforced there and covered
+> by `npm test`; online, the same rules are enforced by Postgres (RPCs + RLS, see
+> `supabase/migrations/`).
 
 ## Running it on a new Windows PC
 
@@ -17,7 +22,7 @@ Double-click **`launch.bat`** (`start.bat` just calls it). It:
 
 It needs internet access the first time. Extract the zip before running it.
 
-## Offline model: seeded logins
+## Offline mode: seeded logins (mock only)
 
 | Username | Password | Role | Notes |
 | --- | --- | --- | --- |
@@ -25,9 +30,11 @@ It needs internet access the first time. Extract the zip before running it.
 | `leader` | `leader123` | team_leader | Linked to an employee; the team leader of `employee` |
 | `employee` | `employee123` | employee | Linked to an employee; reports as themselves |
 
+These accounts exist **only in the offline mock**. Never create them in a real Supabase project.
+
 Reset local data from the browser console with `window.__resetOfflineData()`.
 
-## Rules the backend enforces (offline: in `mockSupabase.ts`)
+## Rules the backend enforces (offline: in `mockSupabase.ts`; online: in Postgres)
 
 - **Identity** comes from the signed-in account's linked employee, never from a form field.
   Only a manager may report on behalf of someone else; that is stored as `submitted_by`.
@@ -45,17 +52,16 @@ Reset local data from the browser console with `window.__resetOfflineData()`.
 - **Reads**: reports are visible to the manager (all), a team leader (own team, own projects, own
   reports) and an employee (own). `manage-user` is manager-only, as in the real Edge Function.
 
-## Not done yet (deliberately deferred)
+## Known limitations
 
-- Real Supabase: `schema.sql` and the migrations still describe the old design (role check without
-  `team_leader`, manager-only report reads, `submit_report(text, jsonb)` taking an employee name,
-  `security definer` trusting the caller). The new `submit_report` / `override_task_completion`
-  contracts and RLS need writing before switching the flag. Note the GitHub Pages workflow builds
-  without `VITE_OFFLINE_MODE=false`, so the deployed site is the offline model.
-- Write permissions in the mock are still open to any signed-in user (only reads and `manage-user` are scoped).
+- Write permissions in the offline mock are still open to any signed-in user (only reads and
+  `manage-user` are scoped). Online, writes are governed by RLS and the RPCs.
 - Team-leader project scope is "projects I created", not "projects I lead".
 - A report back-dated before a newer report for the same task still overwrites the task's current percentage.
 - Project weights are only warned about, not required to total 100% before a project runs.
+- The tests in `tests/` run against the offline mock only; nothing tests the real Postgres RPCs or
+  RLS policies yet, so the mock and the SQL can drift apart.
+- A brand-new Supabase project cannot yet be rebuilt from this repo alone (see *Database* below).
 
 React + TypeScript + Vite frontend with Supabase backend.
 
@@ -76,17 +82,38 @@ The user-management Edge Function uses the Supabase service-role key **only on t
 server side**. Never put the service-role/secret key in `.env` for the React app or
 in GitHub Pages secrets prefixed with `VITE_`.
 
-## First-time setup
+## Database
 
-1. Run `supabase/schema.sql` on a fresh Supabase project.
-2. If you already ran the older schema, run `supabase/migrate-username-login.sql` instead.
-3. Create the first manager once in Supabase Auth using an internal address such as
+`supabase/migrations/` mirrors the migrations applied to the live project, one file per applied
+version (same version numbers and same SQL). Rules:
+
+- Never edit a migration that has been applied. Add a new one (`supabase migration new <name>`).
+- `20260920121351_harden_rls_and_function_grants.sql` enables RLS on `task_activities`, drops the
+  legacy `submit_report_batch` RPC and revokes `anon` execute on internal functions.
+- `supabase/legacy/` holds the pre-tracking schema and hand-run scripts. **Do not run them**; they
+  recreate the old, weaker design (see `supabase/legacy/README.md`).
+- The tables created before migration tracking began are only described by
+  `supabase/legacy/schema.sql`, which has not been verified to replay under the current
+  migrations. Capture a real baseline with `supabase db dump --schema public` before relying on
+  this repo to create a new project.
+
+## First-time setup (existing project)
+
+1. Apply the migrations in `supabase/migrations/` in order (`supabase db push`).
+2. Create the first manager once in Supabase Auth using an internal address such as
    `manager@dprs.local`, confirm it manually, then set that user's profile role to
-   `manager` and username to `manager` using the example in the migration file.
-4. Deploy `supabase/functions/manage-user` as a Supabase Edge Function. The function
+   `manager` and username to `manager` (example in `supabase/legacy/migrate-username-login.sql`).
+3. Deploy `supabase/functions/manage-user` as a Supabase Edge Function. The function
    already receives the Supabase server secrets automatically; it must remain server-side.
-5. The manager can then create all normal users from the application. No further Auth
+4. The manager can then create all normal users from the application. No further Auth
    dashboard work is needed for day-to-day user management.
+
+## CI / deploy
+
+`.github/workflows/deploy.yml` runs on every push to `main`: `npm ci`, `npm run lint`,
+`npm test`, `npm run build` (with `VITE_OFFLINE_MODE=false`), then publishes to GitHub Pages.
+It needs the repository secrets `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the publishable
+key, never a service-role key).
 
 ## Environment variables
 
