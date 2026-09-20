@@ -15,7 +15,7 @@ function addDays(value: string, amount: number) {
 function datesBetween(start: string, end: string) {
   if (!start || !end || start > end) return [];
   const result: string[] = [];
-  for (let offset = 0; offset <= 366; offset += 1) {
+  for (let offset = 0; offset <= 31; offset += 1) {
     const date = addDays(start, offset);
     if (date > end) break;
     result.push(date);
@@ -37,16 +37,17 @@ export const AttendanceView: React.FC<{ backendData: BackendData; onRefreshData:
   const employees = useMemo(() => backendData.employees
     .filter((employee) => !employeeFilter || employee.id === employeeFilter)
     .filter((employee) => !department || employee.department === department), [backendData.employees, department, employeeFilter]);
+  const attendanceByKey = useMemo(() => new Map(backendData.attendance.map((record) => [`${record.employee_id}:${record.attendance_date}`, record])), [backendData.attendance]);
 
-  const entryRows = useMemo(() => employees.map((employee) => backendData.attendance.find((record) => record.employee_id === employee.id && record.attendance_date === date) || ({
+  const entryRows = useMemo(() => employees.map((employee) => attendanceByKey.get(`${employee.id}:${date}`) || ({
     employee_id: employee.id, employee_name: employee.name, department: employee.department, attendance_date: date,
     entrance_time: '', status: 'present' as AttendanceStatus, hours_off: 0, note: '',
-  })), [backendData.attendance, date, employees]);
+  })), [attendanceByKey, date, employees]);
 
-  const reportRows = useMemo(() => mode === 'report' ? datesBetween(rangeStart, rangeEnd).flatMap((reportDate) => employees.map((employee) => backendData.attendance.find((record) => record.employee_id === employee.id && record.attendance_date === reportDate) || ({
+  const reportRows = useMemo(() => mode === 'report' ? datesBetween(rangeStart, rangeEnd).flatMap((reportDate) => employees.map((employee) => attendanceByKey.get(`${employee.id}:${reportDate}`) || ({
     employee_id: employee.id, employee_name: employee.name, department: employee.department, attendance_date: reportDate,
     entrance_time: '', status: 'present' as AttendanceStatus, hours_off: 0, note: '',
-  }))) : [], [backendData.attendance, employees, mode, rangeEnd, rangeStart]);
+  }))) : [], [attendanceByKey, employees, mode, rangeEnd, rangeStart]);
 
   const rows = mode === 'entry' ? entryRows : reportRows;
   const filtered = statusFilter ? rows.filter((row) => row.status === statusFilter) : rows;
@@ -83,7 +84,7 @@ export const AttendanceView: React.FC<{ backendData: BackendData; onRefreshData:
 
       <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 overflow-x-auto">
         <div className="flex items-center gap-2 font-bold text-[#3B4636] mb-1"><CalendarDays className="w-4 h-4 text-[#B89B5E]" />{mode === 'entry' ? `Attendance for ${date}` : `Attendance report: ${rangeStart} to ${rangeEnd}`}</div>
-        <div className="text-[11px] text-stone-500 mb-3">{mode === 'entry' ? 'Choose a date to enter or update attendance.' : 'Choose an employee and date range, then print the filtered report. The maximum printable range is one year.'}</div>
+        <div className="text-[11px] text-stone-500 mb-3">{mode === 'entry' ? 'Choose a date to enter or update attendance.' : 'Choose an employee and date range, then print the filtered report. The maximum printable range is 31 days.'}</div>
         <table className="w-full text-xs">
           <thead><tr className="text-right border-b border-[#DED2AC]"><th className="p-2">{mode === 'report' ? 'Date' : ''}</th><th className="p-2">Employee</th><th className="p-2">Department</th><th className="p-2">Entrance</th><th className="p-2">Status</th><th className="p-2">Hours off</th><th className="p-2">Note</th><th /></tr></thead>
           <tbody>{filtered.map((row: any) => <tr key={`${row.attendance_date}-${row.employee_id}`} className="border-b border-[#DED2AC]/70">
