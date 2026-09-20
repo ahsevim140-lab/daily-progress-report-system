@@ -1,4 +1,5 @@
 -- Hardening pass (security advisor findings + review of the online contract).
+-- Applied to the live project as version 20260920121351.
 -- Idempotent: safe to run more than once.
 
 -- 1. task_activities has policies ("no direct insert", "scoped read") but RLS was never enabled:

@@ -88,7 +88,7 @@ in GitHub Pages secrets prefixed with `VITE_`.
 version (same version numbers and same SQL). Rules:
 
 - Never edit a migration that has been applied. Add a new one (`supabase migration new <name>`).
-- `20260920120000_harden_rls_and_function_grants.sql` enables RLS on `task_activities`, drops the
+- `20260920121351_harden_rls_and_function_grants.sql` enables RLS on `task_activities`, drops the
   legacy `submit_report_batch` RPC and revokes `anon` execute on internal functions.
 - `supabase/legacy/` holds the pre-tracking schema and hand-run scripts. **Do not run them**; they
   recreate the old, weaker design (see `supabase/legacy/README.md`).
