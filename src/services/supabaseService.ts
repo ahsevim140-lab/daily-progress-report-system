@@ -112,13 +112,13 @@ export async function upsertAttendance(record: Omit<AttendanceRecord, 'id' | 'cr
 // Submitted as a single atomic call so a mid-submit failure can't leave a partial report saved.
 // Who is reporting is decided by the backend from the signed-in account; the only override is
 // onBehalfOfEmployeeId, which the backend accepts from managers only.
-export async function submitReport(projectGroups: DraftProjectGroup[], options: { workDate: string; onBehalfOfEmployeeId?: string | null }) {
+export async function submitReport(projectGroups: DraftProjectGroup[], options: { workDate: string; department: string; onBehalfOfEmployeeId?: string | null }) {
   const groups = projectGroups.flatMap((pg) =>
     pg.buildings.map((bg) => ({
       project_id: pg.projectId,
       building_id: bg.buildingId,
       lines: bg.lines.map((l) => ({
-        department: pg.department,
+        department: options.department,
         task: l.task,
         percentage: Number(l.percentage),
         note: l.note.trim() || null,

@@ -9,6 +9,7 @@ const labels: Record<AttendanceStatus, string> = { present: 'Present', late: 'La
 export const AttendanceView: React.FC<{ backendData: BackendData; onRefreshData: () => void }> = ({ backendData, onRefreshData }) => {
   const today = todayLocalYMD();
   const [date, setDate] = useState(today);
+  const [mode, setMode] = useState<'entry' | 'report'>('entry');
   const [nameFilter, setNameFilter] = useState('');
   const [department, setDepartment] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -54,6 +55,10 @@ export const AttendanceView: React.FC<{ backendData: BackendData; onRefreshData:
 
   return (
     <div className="space-y-4 print:text-black">
+      <div className="flex gap-2 bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-2 print:hidden">
+        <button type="button" onClick={() => setMode('entry')} className={`px-4 py-2 rounded-xl text-xs font-bold ${mode === 'entry' ? 'bg-[#B89B5E] text-white' : 'text-[#3B4636]'}`}>Attendance entry</button>
+        <button type="button" onClick={() => setMode('report')} className={`px-4 py-2 rounded-xl text-xs font-bold ${mode === 'report' ? 'bg-[#B89B5E] text-white' : 'text-[#3B4636]'}`}>Report / Print</button>
+      </div>
       <div className="flex flex-wrap items-end gap-3 bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4">
         <label className="text-xs">Date
           <input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="block mt-1 bg-white border border-[#DED2AC] rounded-lg px-2 py-1.5 text-xs" />
@@ -76,7 +81,7 @@ export const AttendanceView: React.FC<{ backendData: BackendData; onRefreshData:
             {Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <button onClick={() => window.print()} className="ml-auto px-3 py-2 bg-[#3B4636] text-white rounded-lg text-xs flex items-center gap-2"><Printer className="w-4 h-4" />Print filtered report</button>
+        {mode === 'report' && <button onClick={() => window.print()} className="ml-auto px-3 py-2 bg-[#3B4636] text-white rounded-lg text-xs flex items-center gap-2"><Printer className="w-4 h-4" />Print filtered report</button>}
       </div>
       <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 overflow-x-auto">
         <div className="flex items-center gap-2 font-bold text-[#3B4636] mb-1"><CalendarDays className="w-4 h-4 text-[#B89B5E]" />Attendance for {date}</div>
@@ -86,11 +91,11 @@ export const AttendanceView: React.FC<{ backendData: BackendData; onRefreshData:
           <tbody>{filtered.map((row: any) => <tr key={row.employee_id} className="border-b border-[#DED2AC]/70">
             <td className="p-2 font-medium">{row.employee_name}</td>
             <td className="p-2">{row.department}</td>
-            <td className="p-2"><input type="time" defaultValue={row.entrance_time || ''} onChange={(event) => { row.entrance_time = event.target.value; }} className="bg-white border border-[#DED2AC] rounded px-2 py-1" /></td>
-            <td className="p-2"><select defaultValue={row.status} onChange={(event) => { row.status = event.target.value; }} className="bg-white border border-[#DED2AC] rounded px-2 py-1">{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></td>
-            <td className="p-2"><input type="number" min="0" step="0.5" defaultValue={row.hours_off || 0} onChange={(event) => { row.hours_off = event.target.value; }} className="w-16 bg-white border border-[#DED2AC] rounded px-2 py-1" /></td>
-            <td className="p-2"><input defaultValue={row.note || ''} onChange={(event) => { row.note = event.target.value; }} className="w-32 bg-white border border-[#DED2AC] rounded px-2 py-1" /></td>
-            <td className="p-2"><button disabled={saving === row.employee_id} onClick={() => save(row)} className="text-[#3B4636]"><Save className="w-4 h-4" /></button></td>
+            <td className="p-2">{mode === 'entry' ? <input type="time" defaultValue={row.entrance_time || ''} onChange={(event) => { row.entrance_time = event.target.value; }} className="bg-white border border-[#DED2AC] rounded px-2 py-1" /> : (row.entrance_time || '—')}</td>
+            <td className="p-2">{mode === 'entry' ? <select defaultValue={row.status} onChange={(event) => { row.status = event.target.value; }} className="bg-white border border-[#DED2AC] rounded px-2 py-1">{Object.entries(labels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select> : labels[row.status as AttendanceStatus]}</td>
+            <td className="p-2">{mode === 'entry' ? <input type="number" min="0" step="0.5" defaultValue={row.hours_off || 0} onChange={(event) => { row.hours_off = event.target.value; }} className="w-16 bg-white border border-[#DED2AC] rounded px-2 py-1" /> : (row.hours_off || 0)}</td>
+            <td className="p-2">{mode === 'entry' ? <input defaultValue={row.note || ''} onChange={(event) => { row.note = event.target.value; }} className="w-32 bg-white border border-[#DED2AC] rounded px-2 py-1" /> : (row.note || '—')}</td>
+            <td className="p-2">{mode === 'entry' && <button disabled={saving === row.employee_id} onClick={() => save(row)} className="text-[#3B4636]"><Save className="w-4 h-4" /></button>}</td>
           </tr>)}</tbody>
         </table>
         {!filtered.length && <div className="text-center text-xs text-stone-500 py-8">No employees match the filters.</div>}

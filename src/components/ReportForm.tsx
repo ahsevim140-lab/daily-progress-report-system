@@ -61,6 +61,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
   const onBehalf = isManager && (reportOnBehalf || !ownEmployee);
   const behalfCandidates = backendData.employees.filter((e) => e.department === behalfDept);
   const reportingEmployee = onBehalf ? backendData.employees.find((e) => e.id === behalfEmployeeId) : ownEmployee;
+  const fixedDepartment = reportingEmployee?.department || '';
   const openProjects = backendData.projects.filter((p) => acceptsProgress(p.status));
 
   const buildingsForProject = (projectId: string) => backendData.buildings.filter((b) => b.project_id === projectId);
@@ -112,9 +113,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
     setProjectGroups(projectGroups.filter((pg) => pg.id !== id));
   };
   const setProjectId = (id: string, projectId: string) =>
-    setProjectGroups(projectGroups.map((pg) => (pg.id === id ? { ...pg, projectId, department: '', buildings: [emptyBuildingGroup()] } : pg)));
-  const setProjectDepartment = (id: string, department: string) =>
-    setProjectGroups(projectGroups.map((pg) => (pg.id === id ? { ...pg, department, buildings: pg.buildings.map((bg) => ({ ...bg, lines: bg.lines.map((line) => ({ ...line, category: '', task: '' })) })) } : pg)));
+    setProjectGroups(projectGroups.map((pg) => (pg.id === id ? { ...pg, projectId, buildings: [emptyBuildingGroup()] } : pg)));
 
   // ---- building group mutators ----
   const addBuildingGroup = (projectGroupId: string) =>
@@ -178,19 +177,19 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
     if (!reportingEmployee || !workDate) return false;
     if (projectGroups.length === 0) return false;
     return projectGroups.every((pg) => {
-      if (!pg.projectId || pg.buildings.length === 0) return false;
+      if (!pg.projectId || !fixedDepartment || pg.buildings.length === 0) return false;
       return pg.buildings.every((bg) => {
         if (!bg.buildingId || bg.lines.length === 0) return false;
         return bg.lines.every((line) => {
-          if (!pg.department || !line.category || !line.task || line.percentage === '') return false;
-          const st = lineStatus(pg.projectId, bg.buildingId, pg.department, line);
+          if (!line.category || !line.task || line.percentage === '') return false;
+          const st = lineStatus(pg.projectId, bg.buildingId, fixedDepartment, line);
           if ((st === 'stalled' || st === 'regressed') && !line.note.trim()) return false;
           return true;
         });
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportingEmployee, projectGroups, backendData.projectTasks]);
+  }, [reportingEmployee, fixedDepartment, projectGroups, backendData.projectTasks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -203,7 +202,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
     setStatus({ type: 'info', message: 'جارٍ حفظ التقرير...' });
 
     try {
-      await submitReport(projectGroups, { workDate, onBehalfOfEmployeeId: onBehalf ? behalfEmployeeId : null });
+      await submitReport(projectGroups, { workDate, department: fixedDepartment, onBehalfOfEmployeeId: onBehalf ? behalfEmployeeId : null });
       setStatus({ type: 'ok', message: 'تم حفظ التقرير بنجاح.' });
       setProjectGroups([emptyProjectGroup()]);
     } catch (err: any) {
@@ -304,24 +303,6 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                       ))}
                     </select>
                   </div>
-                  <div className="flex-1">
-                    <label className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#7A7361] mb-2">
-                      <Layers className="w-3.5 h-3.5 text-[#B89B5E]" />
-                      القسم / الاختصاص
-                    </label>
-                    <select
-                      value={pg.department}
-                      onChange={(e) => setProjectDepartment(pg.id, e.target.value)}
-                      disabled={!pg.projectId}
-                      className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:border-[#B89B5E] font-medium disabled:bg-stone-100 disabled:text-stone-400"
-                      required
-                    >
-                      <option value="">{pg.projectId ? 'اختر القسم...' : 'اختر المشروع أولاً...'}</option>
-                      {backendData.departments.map((department) => (
-                        <option key={department} value={department}>{department}</option>
-                      ))}
-                    </select>
-                  </div>
                   {projectGroups.length > 1 && (
                     <button
                       type="button"
@@ -372,8 +353,8 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                       {/* Task lines within this building */}
                       <div className="space-y-4">
                         {bg.lines.map((line, lineIndex) => {
-                          const current = currentCompletion(pg.projectId, bg.buildingId, pg.department, line.task);
-                          const st = lineStatus(pg.projectId, bg.buildingId, pg.department, line);
+                          const current = currentCompletion(pg.projectId, bg.buildingId, fixedDepartment, line.task);
+                          const st = lineStatus(pg.projectId, bg.buildingId, fixedDepartment, line);
                           const needsNote = st === 'stalled' || st === 'regressed';
 
                           return (
@@ -418,12 +399,12 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                                       setLineField(pg.id, bg.id, line.id, 'category', e.target.value);
                                       setLineField(pg.id, bg.id, line.id, 'task', '');
                                     }}
-                                    disabled={!pg.department || !bg.buildingId}
+                                    disabled={!fixedDepartment || !bg.buildingId}
                                     className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] disabled:bg-stone-100 disabled:text-stone-400"
                                     required
                                   >
-                                    <option value="">{pg.department ? 'اختر المهمة الرئيسية...' : 'اختر القسم أولاً...'}</option>
-                                    {getMainTaskOptions(pg.projectId, bg.buildingId, pg.department).map((main) => (
+                                    <option value="">{fixedDepartment ? 'اختر المهمة الرئيسية...' : 'لا يوجد قسم مرتبط بالحساب...'}</option>
+                                    {getMainTaskOptions(pg.projectId, bg.buildingId, fixedDepartment).map((main) => (
                                       <option key={main} value={main}>{main}</option>
                                     ))}
                                   </select>
@@ -442,7 +423,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                                     required
                                   >
                                     <option value="">{line.category ? 'اختر المهمة الفرعية...' : 'اختر المهمة الرئيسية أولاً...'}</option>
-                                    {getSubtaskOptions(pg.projectId, bg.buildingId, pg.department, line.category).map((sub) => (
+                                    {getSubtaskOptions(pg.projectId, bg.buildingId, fixedDepartment, line.category).map((sub) => (
                                       <option key={sub} value={sub}>{sub}</option>
                                     ))}
                                   </select>
