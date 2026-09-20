@@ -34,6 +34,7 @@ interface MockDB {
   attendance: Row[];
   report_batches: Row[];
   report_lines: Row[];
+  login_audits: Row[];
   users: Row[]; // combines auth + profile + app-user fields
 }
 
@@ -146,6 +147,7 @@ function seedDB(): MockDB {
     attendance: [],
     report_batches: [],
     report_lines: [],
+    login_audits: [],
     users,
   };
 }
@@ -161,6 +163,7 @@ function loadDB(): MockDB {
       loaded.task_activities ||= [];
       loaded.report_batches ||= [];
       loaded.report_lines ||= [];
+      loaded.login_audits ||= [];
       loaded.projects = (loaded.projects || []).map((p) => ({ status: 'running', ...p }));
       loaded.buildings = (loaded.buildings || []).map((b) => ({ weight_percent: 0, ...b }));
       loaded.project_tasks = (loaded.project_tasks || []).map((t) => ({ task: '', priority: 'normal', status: 'not_started', ...t }));
@@ -552,6 +555,8 @@ export const mockSupabase = {
       }
       session = { userId: user.id };
       saveSession(session);
+      db.login_audits.push({ id: uid(), user_id: user.id, username: user.username, display_name: user.display_name, role: user.role, employee_id: user.employee_id || null, logged_in_at: new Date().toISOString() });
+      saveDB(db);
       return { data: { session: { user: { id: user.id } }, user: { id: user.id } }, error: null };
     },
     async signOut() {

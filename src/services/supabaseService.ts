@@ -25,6 +25,10 @@ function usernameEmail(username: string) { return `${username.trim().toLowerCase
 export async function signIn(username: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({ email: usernameEmail(username), password });
   if (error) throw error;
+  if (data.user) {
+    const { data: profile } = await supabase.from('profiles').select('username, display_name, role, employee_id').eq('id', data.user.id).single();
+    if (profile) await supabase.from('login_audits').insert({ user_id: data.user.id, username: profile.username, display_name: profile.display_name, role: profile.role, employee_id: profile.employee_id, logged_in_at: new Date().toISOString() });
+  }
   return data;
 }
 
@@ -45,10 +49,11 @@ export async function getCurrentProfile(): Promise<Profile | null> {
 }
 
 export async function fetchBackendData(): Promise<BackendData> {
-  const [deptRes, empRes, profileRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes] = await Promise.all([
+  const [deptRes, empRes, profileRes, loginRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes] = await Promise.all([
     supabase.from('departments').select('*').order('name'),
     supabase.from('employees').select('*').order('name'),
     supabase.from('profiles').select('username, employee_id'),
+    supabase.from('login_audits').select('*').order('logged_in_at', { ascending: false }),
     supabase.from('projects').select('*').order('name'),
     supabase.from('project_assignments').select('*'),
     supabase.from('buildings').select('*').order('name'),
@@ -58,7 +63,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     supabase.from('task_activities').select('*').order('activity_date', { ascending: false }),
     supabase.from('attendance').select('*').order('attendance_date', { ascending: false }),
   ]);
-  const firstError = [deptRes, empRes, profileRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes].find((r) => r.error)?.error;
+  const firstError = [deptRes, empRes, profileRes, loginRes, projRes, assignmentRes, buildRes, areaRes, taskRes, ptRes, activityRes, attendanceRes].find((r) => r.error)?.error;
   if (firstError) throw firstError;
   const departments = (deptRes.data || []) as Department[];
   const usernames = new Map((profileRes.data || []).filter((p: any) => p.employee_id).map((p: any) => [p.employee_id, p.username]));
@@ -74,7 +79,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     projectAssignments: (assignmentRes.data || []) as ProjectAssignment[],
     buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []).map((area: any) => ({ area_m2: 0, ...area })) as Area[], taskCategories: (taskRes.data || []).map((cat: any) => ({ ...cat, departments: cat.departments?.length ? cat.departments : (cat.department ? [cat.department] : []) })) as TaskCategory[],
     projectTasks: (ptRes.data || []).map((t: any) => ({ task: t.task || '', priority: 'normal', status: 'not_started', assigned_employee_name: employees.find((e) => e.id === t.assigned_employee_id)?.name, ...t })) as ProjectTask[],
-    activities: (activityRes.data || []) as TaskActivity[], attendance,
+    activities: (activityRes.data || []) as TaskActivity[], attendance, loginAudits: (loginRes.data || []) as any[],
   };
 }
 

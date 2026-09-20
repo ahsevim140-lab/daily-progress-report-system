@@ -21,6 +21,7 @@ const EMPTY_DATA: BackendData = {
   projectTasks: [],
   activities: [],
   attendance: [],
+  loginAudits: [],
 };
 
 export default function App() {

@@ -1,16 +1,27 @@
 import React, { useMemo, useState } from 'react';
-import { BackendData } from '../../types';
-import { Activity, AlertTriangle, CalendarDays, Search } from 'lucide-react';
+import { BackendData, Role } from '../../types';
+import { CalendarDays, Clock3, LogIn, Search, UserCheck } from 'lucide-react';
 
-function daysSince(value?: string) { if (!value) return null; return Math.floor((Date.now() - new Date(value).getTime()) / 86400000); }
+const roleLabels: Record<Role, string> = { employee: 'Employee', team_leader: 'Team Leader', manager: 'Manager' };
+function formatTimestamp(value: string) { return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); }
+
 export const ActivityView: React.FC<{ backendData: BackendData }> = ({ backendData }) => {
   const [query, setQuery] = useState('');
-  const [projectId, setProjectId] = useState('');
-  const activities = useMemo(() => backendData.activities.filter((activity) => {
-    const task = backendData.projectTasks.find((t) => t.id === activity.project_task_id);
-    const project = task ? backendData.projects.find((p) => p.id === task.project_id) : null;
-    const haystack = `${activity.description} ${activity.employee_name || ''} ${task?.task || ''} ${task?.department || ''}`.toLowerCase();
-    return (!projectId || project?.id === projectId) && (!query.trim() || haystack.includes(query.toLowerCase()));
-  }), [backendData, projectId, query]);
-  return <div className="space-y-4"><div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 space-y-2"><div className="flex flex-wrap gap-2 items-center"><div className="relative flex-1 min-w-56"><Search className="absolute right-2 top-2 w-4 h-4 text-stone-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search task progress history..." className="w-full bg-white border border-[#DED2AC] rounded-lg px-8 py-2 text-xs" /></div><select value={projectId} onChange={(e) => setProjectId(e.target.value)} className="bg-white border border-[#DED2AC] rounded-lg px-3 py-2 text-xs"><option value="">All projects</option>{backendData.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div><p className="text-[11px] text-stone-500">This page records task progress updates and manager corrections. It is not a login or sign-in history.</p></div><div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 space-y-3"><div className="flex items-center gap-2 font-bold text-[#3B4636] text-sm"><Activity className="w-4 h-4 text-[#B89B5E]" />Task activity history <span className="text-[10px] text-stone-500 font-normal">{activities.length} records</span></div>{activities.map((activity) => { const task = backendData.projectTasks.find((t) => t.id === activity.project_task_id); const project = task ? backendData.projects.find((p) => p.id === task.project_id) : null; const age = daysSince(activity.activity_date); return <div key={activity.id} className="border border-[#DED2AC] rounded-xl p-3 bg-[#F3EDDD]"><div className="flex flex-wrap justify-between gap-2 text-xs"><strong>{activity.employee_name || 'Staff member'}</strong><span className="text-stone-500 flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" />{activity.activity_date}</span></div><div className="text-xs mt-2 text-[#3B4636]">{project?.name || 'Project'} · {task?.department || ''} {task?.task ? `— ${task.task}` : ''}</div><p className="text-xs mt-2 text-stone-700">{activity.description}</p><div className="flex flex-wrap gap-3 mt-2 text-[10px] text-stone-500"><span>Progress: {activity.previous_percent}% → {activity.new_percent}%</span>{activity.hours_worked != null && <span>Hours: {activity.hours_worked}</span>}{activity.blocker && <span className="text-red-700 flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{activity.blocker}</span>}{age != null && age > 3 && <span className="text-amber-700">Older than 3 days</span>}</div></div>})}{!activities.length && <div className="text-center text-xs text-stone-500 py-10">No activity matches the filters.</div>}</div></div>;
+  const [role, setRole] = useState('');
+  const audits = useMemo(() => backendData.loginAudits.filter((audit) => {
+    const haystack = `${audit.username} ${audit.display_name} ${roleLabels[audit.role]}`.toLowerCase();
+    return (!role || audit.role === role) && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
+  }), [backendData.loginAudits, query, role]);
+  return <div className="space-y-4">
+    <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 space-y-2">
+      <div className="flex items-center gap-2 text-[#3B4636] font-bold"><LogIn className="w-5 h-5 text-[#B89B5E]" />Login Activity</div>
+      <p className="text-xs text-stone-500">Successful sign-ins recorded by the system. Failed login attempts are not stored.</p>
+      <div className="flex flex-wrap gap-2 pt-2"><div className="relative flex-1 min-w-56"><Search className="absolute right-2 top-2 w-4 h-4 text-stone-400" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search username or name..." className="w-full bg-white border border-[#DED2AC] rounded-lg px-8 py-2 text-xs" /></div><select value={role} onChange={(e) => setRole(e.target.value)} className="bg-white border border-[#DED2AC] rounded-lg px-3 py-2 text-xs"><option value="">All roles</option><option value="manager">Managers</option><option value="team_leader">Team leaders</option><option value="employee">Employees</option></select></div>
+    </div>
+    <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 space-y-3">
+      <div className="flex items-center gap-2 font-bold text-[#3B4636] text-sm"><Clock3 className="w-4 h-4 text-[#B89B5E]" />Recent sign-ins <span className="text-[10px] text-stone-500 font-normal">{audits.length} records</span></div>
+      {audits.map((audit) => <div key={audit.id} className="flex flex-wrap items-center justify-between gap-3 bg-[#F3EDDD] border border-[#DED2AC] rounded-xl p-3"><div className="flex items-center gap-3"><div className="w-9 h-9 rounded-full bg-[#3B4636] text-[#F2EEDD] flex items-center justify-center"><UserCheck className="w-4 h-4" /></div><div><div className="text-xs font-bold text-[#3B4636]">{audit.display_name}</div><div className="text-[11px] text-stone-500">@{audit.username} · {roleLabels[audit.role]}{audit.employee_id ? ` · linked employee` : ''}</div></div></div><div className="text-[11px] text-stone-600 flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5 text-[#B89B5E]" />{formatTimestamp(audit.logged_in_at)}</div></div>)}
+      {!audits.length && <div className="text-center text-xs text-stone-500 py-10">No login records match the filters.</div>}
+    </div>
+  </div>;
 };
