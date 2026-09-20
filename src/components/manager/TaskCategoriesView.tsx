@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { BackendData } from '../../types';
-import { addTaskSub, deleteTaskSub, setTaskCategoryDepartment } from '../../services/supabaseService';
+import { addTaskSub, deleteTaskSub, setTaskCategoryVisibility } from '../../services/supabaseService';
 import { Plus, ListTodo, Trash2 } from 'lucide-react';
 
 interface TaskCategoriesViewProps {
@@ -72,12 +72,14 @@ export const TaskCategoriesView: React.FC<TaskCategoriesViewProps> = ({ backendD
             <div key={cat.id} className="bg-[#F3EDDD] border border-[#DED2AC] p-4 rounded-xl space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-bold text-[#3B4636]">{cat.main}</div>
-                <label className="text-[11px] text-stone-600">Visible for department
-                  <select value={cat.department || ''} onChange={(e) => withSaving(() => setTaskCategoryDepartment(cat.id, e.target.value || null), 'Category department updated.')} className="mr-2 bg-white border border-[#DED2AC] rounded px-2 py-1 text-xs">
-                    <option value="">Unassigned</option>
-                    {backendData.departments.map((department) => <option key={department} value={department}>{department}</option>)}
-                  </select>
-                </label>
+                <span className="text-[11px] text-stone-500">Choose one or more departments, or mark as general</span>
+              </div>
+              <div className="flex flex-wrap gap-3 text-xs">
+                <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={Boolean(cat.is_general)} onChange={(e) => withSaving(() => setTaskCategoryVisibility(cat.id, cat.departments || (cat.department ? [cat.department] : []), e.target.checked), 'Category visibility updated.')} />General — all departments</label>
+                {backendData.departments.map((department) => {
+                  const selected = (cat.departments || (cat.department ? [cat.department] : [])).includes(department);
+                  return <label key={department} className="inline-flex items-center gap-1.5"><input type="checkbox" checked={selected} onChange={(e) => { const current = cat.departments || (cat.department ? [cat.department] : []); const next = e.target.checked ? [...new Set([...current, department])] : current.filter((item) => item !== department); withSaving(() => setTaskCategoryVisibility(cat.id, next, Boolean(cat.is_general)), 'Category visibility updated.'); }} />{department}</label>;
+                })}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {cat.subs.map((sub) => (

@@ -70,7 +70,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     departments: departments.map((d) => d.name), departmentRows: departments, employees,
     projects: (projRes.data || []).map((p: any) => ({ status: 'running', ...p })) as Project[],
     projectAssignments: (assignmentRes.data || []) as ProjectAssignment[],
-    buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []) as Area[], taskCategories: (taskRes.data || []) as TaskCategory[],
+    buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []) as Area[], taskCategories: (taskRes.data || []).map((cat: any) => ({ ...cat, departments: cat.departments?.length ? cat.departments : (cat.department ? [cat.department] : []) })) as TaskCategory[],
     projectTasks: (ptRes.data || []).map((t: any) => ({ task: t.task || '', priority: 'normal', status: 'not_started', assigned_employee_name: employees.find((e) => e.id === t.assigned_employee_id)?.name, ...t })) as ProjectTask[],
     activities: (activityRes.data || []) as TaskActivity[], attendance,
   };
@@ -98,7 +98,7 @@ export async function updateArea(id: string, name: string) { const { error } = a
 export async function deleteArea(id: string) { const { error } = await supabase.from('areas').delete().eq('id', id); if (error) throw error; }
 export async function addTaskSub(main: string, sub: string, existing: TaskCategory[]) { const match = existing.find((c) => c.main === main); const result = match ? supabase.from('task_categories').update({ subs: [...(match.subs.includes(sub) ? match.subs : [...match.subs, sub])] }).eq('id', match.id) : supabase.from('task_categories').insert({ main, subs: [sub] }); const { error } = await result; if (error) throw error; }
 export async function deleteTaskSub(category: TaskCategory, sub: string) { const newSubs = category.subs.filter((s) => s !== sub); const { error } = newSubs.length ? await supabase.from('task_categories').update({ subs: newSubs }).eq('id', category.id) : await supabase.from('task_categories').delete().eq('id', category.id); if (error) throw error; }
-export async function setTaskCategoryDepartment(id: string, department: string | null) { const { error } = await supabase.from('task_categories').update({ department: department || null }).eq('id', id); if (error) throw error; }
+export async function setTaskCategoryVisibility(id: string, departments: string[], isGeneral: boolean) { const { error } = await supabase.from('task_categories').update({ departments, is_general: isGeneral, department: departments.length === 1 ? departments[0] : null }).eq('id', id); if (error) throw error; }
 export async function setProjectTaskWeight(id: string, weightPercent: number) { const { error } = await supabase.from('project_tasks').update({ weight_percent: weightPercent }).eq('id', id); if (error) throw error; }
 export async function setProjectTaskSelection(id: string, changes: { department: string; task: string; category?: string | null; weight_percent: number }) { const { error } = await supabase.from('project_tasks').update(changes).eq('id', id); if (error) throw error; }
 export async function updateProjectTaskDetails(id: string, changes: Partial<ProjectTask>) { const { error } = await supabase.from('project_tasks').update(changes).eq('id', id); if (error) throw error; }

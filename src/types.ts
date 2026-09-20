@@ -8,7 +8,7 @@ export const PROGRESS_CLOSED_STATUSES: ProjectStatus[] = ['completed', 'stopped'
 export type AttendanceStatus = 'present' | 'late' | 'day_off' | 'hours_off' | 'absent';
 export interface Department { id: string; name: string; active?: boolean; }
 export interface Employee { id: string; department: string; name: string; }
-export interface TaskCategory { id: string; main: string; subs: string[]; department?: string | null; }
+export interface TaskCategory { id: string; main: string; subs: string[]; department?: string | null; departments?: string[]; is_general?: boolean; }
 export interface Project { id: string; name: string; status: ProjectStatus; description?: string | null; start_date?: string | null; target_date?: string | null; created_by?: string | null; created_at?: string; }
 export interface ProjectAssignment { id: string; project_id: string; employee_id: string; assigned_by?: string | null; assigned_at?: string; }
 export interface Building { id: string; project_id: string; name: string; weight_percent: number; }
