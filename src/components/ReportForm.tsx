@@ -174,6 +174,14 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
           : pg
       )
     );
+  const setLineFields = (projectGroupId: string, buildingGroupId: string, lineId: string, changes: Partial<DraftTaskLine>) =>
+    setProjectGroups(
+      projectGroups.map((pg) => pg.id === projectGroupId
+        ? { ...pg, buildings: pg.buildings.map((bg) => bg.id === buildingGroupId
+          ? { ...bg, lines: bg.lines.map((line) => line.id === lineId ? { ...line, ...changes } : line) }
+          : bg) }
+        : pg)
+    );
 
   const canSubmit = useMemo(() => {
     if (!reportingEmployee || !workDate) return false;
@@ -398,8 +406,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
                                   <select
                                     value={line.category}
                                     onChange={(e) => {
-                                      setLineField(pg.id, bg.id, line.id, 'category', e.target.value);
-                                      setLineField(pg.id, bg.id, line.id, 'task', '');
+                                      setLineFields(pg.id, bg.id, line.id, { category: e.target.value, task: '' });
                                     }}
                                     disabled={!fixedDepartment || !bg.buildingId}
                                     className="w-full bg-white border border-[#DED2AC] text-stone-900 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-[#B89B5E] disabled:bg-stone-100 disabled:text-stone-400"
