@@ -12,6 +12,16 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
+// Applies to new accounts and password resets. Existing shorter passwords keep working until changed.
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 72; // Supabase Auth (bcrypt) limit
+
+function passwordError(password: string): string | null {
+  if (password.length < MIN_PASSWORD_LENGTH) return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`;
+  if (password.length > MAX_PASSWORD_LENGTH) return `Password must be at most ${MAX_PASSWORD_LENGTH} characters.`;
+  return null;
+}
+
 function normalizeUsername(value: string) {
   return value.trim().toLowerCase();
 }
@@ -60,7 +70,7 @@ Deno.serve(async (req) => {
     if (action === 'list') {
       const { data: profiles, error } = await admin
         .from('profiles')
-        .select('id, username, display_name, role, active, employee_id, team_leader_id, created_at')
+        .select('id, username, display_name, role, active, employee_id, team_leader_id, department, created_at')
         .order('display_name', { ascending: true });
       if (error) throw error;
       return json({ users: profiles || [] });
@@ -73,11 +83,13 @@ Deno.serve(async (req) => {
       const role = ['manager', 'team_leader'].includes(body.role) ? body.role : 'employee';
       const employeeId = body.employee_id || null;
       const teamLeaderId = role === 'employee' ? (body.team_leader_id || null) : null;
+      const department = body.department ? String(body.department).trim() : null;
 
       if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
         return json({ error: 'Username must be 3–32 characters and use only letters, numbers, dot, dash, or underscore.' }, 400);
       }
-      if (password.length < 6) return json({ error: 'Password must be at least 6 characters.' }, 400);
+      const createPasswordError = passwordError(password);
+      if (createPasswordError) return json({ error: createPasswordError }, 400);
       if (!displayName) return json({ error: 'Display name is required.' }, 400);
 
       const { data: existing } = await admin.from('profiles').select('id').eq('username', username).maybeSingle();
@@ -100,7 +112,7 @@ Deno.serve(async (req) => {
 
       const { error: profileError } = await admin
         .from('profiles')
-        .update({ username, display_name: displayName, role, active: true, employee_id: employeeId, team_leader_id: teamLeaderId })
+        .update({ username, display_name: displayName, role, active: true, employee_id: employeeId, team_leader_id: teamLeaderId, department })
         .eq('id', created.user.id);
 
       if (profileError) {
@@ -119,9 +131,11 @@ Deno.serve(async (req) => {
       const teamLeaderId = role === 'employee' ? (body.team_leader_id || null) : null;
       const active = body.active !== false;
       const password = body.password ? String(body.password) : '';
+      const department = body.department ? String(body.department).trim() : null;
 
       if (!id || !displayName) return json({ error: 'User and display name are required.' }, 400);
-      if (password && password.length < 6) return json({ error: 'Password must be at least 6 characters.' }, 400);
+      const updatePasswordError = password ? passwordError(password) : null;
+      if (updatePasswordError) return json({ error: updatePasswordError }, 400);
       if (id === user.id && (!active || role !== 'manager')) return json({ error: 'You cannot deactivate or demote your own account.' }, 400);
       if (teamLeaderId === id) return json({ error: 'A user cannot be their own team leader.' }, 400);
 
@@ -132,12 +146,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      const { error: profileError } = await admin.from('profiles').update({ display_name: displayName, role, active, employee_id: employeeId, team_leader_id: teamLeaderId }).eq('id', id);
+      const { data: updated, error: profileError } = await admin.from('profiles').update({ display_name: displayName, role, active, employee_id: employeeId, team_leader_id: teamLeaderId, department }).eq('id', id).select('id');
       if (profileError) throw profileError;
+      if (!updated || updated.length === 0) return json({ error: 'User not found.' }, 404);
 
       if (password) {
-        const { error: passwordError } = await admin.auth.admin.updateUserById(id, { password });
-        if (passwordError) throw passwordError;
+        const { error: resetError } = await admin.auth.admin.updateUserById(id, { password });
+        if (resetError) throw resetError;
       }
 
       return json({ ok: true });
