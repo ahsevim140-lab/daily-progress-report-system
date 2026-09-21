@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { BackendData, DraftBuildingGroup, DraftProjectGroup, DraftTaskLine, Profile } from '../types';
 import { submitReport } from '../services/supabaseService';
 import { acceptsProgress, deriveFlag, todayLocalYMD } from '../utils';
@@ -57,6 +57,62 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
 
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ type: 'ok' | 'err' | 'info'; message: string } | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const draftStorageKey = profile?.id ? `dprs:daily-report-draft:${profile.id}:${workDate}` : null;
+
+  // Keep unfinished reports recoverable when the page is refreshed or closed.
+  // The draft is scoped to the signed-in account and work date; it never replaces
+  // the server-side submission and is removed only after a successful submit.
+  useEffect(() => {
+    setDraftHydrated(false);
+    if (!draftStorageKey) {
+      setDraftHydrated(true);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(draftStorageKey);
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          projectGroups?: DraftProjectGroup[];
+          behalfDept?: string;
+          behalfEmployeeId?: string;
+          reportOnBehalf?: boolean;
+          savedAt?: string;
+        };
+        if (Array.isArray(draft.projectGroups) && draft.projectGroups.length > 0) setProjectGroups(draft.projectGroups);
+        if (typeof draft.behalfDept === 'string') setBehalfDept(draft.behalfDept);
+        if (typeof draft.behalfEmployeeId === 'string') setBehalfEmployeeId(draft.behalfEmployeeId);
+        if (typeof draft.reportOnBehalf === 'boolean') setReportOnBehalf(draft.reportOnBehalf);
+        if (draft.savedAt) setDraftSavedAt(draft.savedAt);
+      }
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+    } finally {
+      setDraftHydrated(true);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (!draftHydrated || !draftStorageKey) return;
+    const savedAt = new Date().toISOString();
+    try {
+      window.localStorage.setItem(draftStorageKey, JSON.stringify({ projectGroups, behalfDept, behalfEmployeeId, reportOnBehalf, savedAt }));
+      setDraftSavedAt(savedAt);
+    } catch {
+      // Local storage can be unavailable in private browsing or restricted contexts.
+    }
+  }, [draftHydrated, draftStorageKey, projectGroups, behalfDept, behalfEmployeeId, reportOnBehalf]);
+
+  const discardDraft = () => {
+    if (draftStorageKey) window.localStorage.removeItem(draftStorageKey);
+    setProjectGroups([emptyProjectGroup()]);
+    setBehalfDept('');
+    setBehalfEmployeeId('');
+    setReportOnBehalf(false);
+    setDraftSavedAt(null);
+    setStatus({ type: 'info', message: 'تم حذف المسودة المحلية.' });
+  };
 
   const onBehalf = isManager && (reportOnBehalf || !ownEmployee);
   const behalfCandidates = backendData.employees.filter((e) => e.department === behalfDept);
@@ -214,7 +270,9 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
     try {
       await submitReport(projectGroups, { workDate, department: fixedDepartment, onBehalfOfEmployeeId: onBehalf ? behalfEmployeeId : null });
       setStatus({ type: 'ok', message: 'تم حفظ التقرير بنجاح.' });
+      if (draftStorageKey) window.localStorage.removeItem(draftStorageKey);
       setProjectGroups([emptyProjectGroup()]);
+      setDraftSavedAt(null);
     } catch (err: any) {
       setStatus({ type: 'err', message: 'حدث خطأ أثناء الإرسال: ' + (err.message || err) });
     } finally {
@@ -535,7 +593,15 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
             </button>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-2 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-stone-500">
+              <span>{draftSavedAt ? `تم الحفظ تلقائياً ${new Date(draftSavedAt).toLocaleTimeString()}` : 'المسودة تُحفظ تلقائياً على هذا الجهاز'}</span>
+              {draftSavedAt && (
+                <button type="button" onClick={discardDraft} className="text-[#9C4A3C] hover:underline font-semibold">
+                  حذف المسودة والبدء من جديد
+                </button>
+              )}
+            </div>
             <button
               type="submit"
               disabled={submitting || !canSubmit}
