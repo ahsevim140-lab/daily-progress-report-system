@@ -1,1 +1,8 @@
 @import "tailwindcss";
+
+@media print {
+  .no-print { display: none !important; }
+  .print-report { color: #1c1917; background: white; }
+  .print-report section, .print-report article { break-inside: avoid; box-shadow: none !important; }
+  body { background: white !important; }
+}
