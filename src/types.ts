@@ -28,7 +28,7 @@ export interface TaskActivity { id: string; project_task_id: string | null; empl
 export interface Profile { id: string; username?: string; display_name: string; role: Role; active: boolean; employee_id: string | null; team_leader_id: string | null; }
 export interface AttendanceRecord { id: string; employee_id: string; employee_name?: string; department?: string; attendance_date: string; entrance_time: string | null; status: AttendanceStatus; hours_off: number; note: string | null; created_at?: string; updated_at?: string; }
 export interface LoginAudit { id: string; user_id: string; username: string; display_name: string; role: Role; employee_id?: string | null; logged_in_at: string; }
-export interface BackendData { projects: Project[]; employees: Employee[]; projectAssignments: ProjectAssignment[]; taskCategories: TaskCategory[]; departments: string[]; departmentRows?: Department[]; buildings: Building[]; areas: Area[]; projectTasks: ProjectTask[]; activities: TaskActivity[]; attendance: AttendanceRecord[]; loginAudits: LoginAudit[]; }
+export interface BackendData { projects: Project[]; employees: Employee[]; projectAssignments: ProjectAssignment[]; taskCategories: TaskCategory[]; departments: string[]; departmentRows?: Department[]; buildings: Building[]; areas: Area[]; projectTasks: ProjectTask[]; activities: TaskActivity[]; reportBatches: ReportBatch[]; attendance: AttendanceRecord[]; loginAudits: LoginAudit[]; }
 export type ReportFlag = 'none' | 'stalled' | 'regressed';
 // A report is 1+ projects, each with 1+ buildings, each with 1+ task lines.
 export interface DraftTaskLine { id: string; category: string; task: string; percentage: string; activity: string; hoursWorked: string; blocker: string; note: string; }

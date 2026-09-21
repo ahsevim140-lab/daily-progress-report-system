@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BackendData, Project, ProjectTask } from '../../types';
 import {
   AlertTriangle, BarChart3, CalendarClock, CheckCircle2, ChevronDown, ChevronUp,
-  Clock3, Filter, Printer, Search, ShieldAlert, UserRound, Users, X,
+  ClipboardCheck, Clock3, Filter, Printer, Search, ShieldAlert, TrendingUp, UserCheck, UserRound, Users, X,
 } from 'lucide-react';
 import { todayLocalYMD } from '../../utils';
 
@@ -60,6 +60,8 @@ export const ProjectOverviewView: React.FC<{ backendData: BackendData }> = ({ ba
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [selectedProjectId, setSelectedProjectId] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [employeeFilter, setEmployeeFilter] = useState('all');
+  const [periodDays, setPeriodDays] = useState(7);
   const [search, setSearch] = useState('');
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
   const today = todayLocalYMD();
@@ -80,9 +82,10 @@ export const ProjectOverviewView: React.FC<{ backendData: BackendData }> = ({ ba
   const visibleSummaries = useMemo(() => summaries.filter((summary) => {
     const projectMatches = selectedProjectId === 'all' || summary.project.id === selectedProjectId;
     const statusMatches = statusFilter === 'all' || summary.health === statusFilter;
+    const employeeMatches = employeeFilter === 'all' || summary.tasks.some((task) => task.assigned_employee_id === employeeFilter);
     const searchMatches = !search.trim() || summary.project.name.toLowerCase().includes(search.toLowerCase()) || summary.tasks.some((task) => `${task.department} ${task.task}`.toLowerCase().includes(search.toLowerCase()));
-    return projectMatches && statusMatches && searchMatches;
-  }), [summaries, selectedProjectId, statusFilter, search]);
+    return projectMatches && statusMatches && employeeMatches && searchMatches;
+  }), [summaries, selectedProjectId, statusFilter, employeeFilter, search]);
 
   const visibleTasks = visibleSummaries.flatMap((summary) => summary.tasks.map((task) => ({ task, project: summary.project })));
   const attentionItems = visibleSummaries.flatMap((summary) => [
@@ -101,16 +104,46 @@ export const ProjectOverviewView: React.FC<{ backendData: BackendData }> = ({ ba
     staff: new Set(visibleSummaries.flatMap((summary) => [...summary.staff])).size,
   }), [visibleSummaries, visibleTasks.length]);
 
+  const reporting = useMemo(() => {
+    const activeProjectIds = new Set(visibleSummaries.filter((summary) => !['completed', 'stopped', 'not_wanted'].includes(summary.project.status)).map((summary) => summary.project.id));
+    const expectedEmployees = backendData.employees.filter((employee) => backendData.projectAssignments.some((assignment) => assignment.employee_id === employee.id && activeProjectIds.has(assignment.project_id)) && (employeeFilter === 'all' || employee.id === employeeFilter));
+    const submittedToday = new Set(backendData.reportBatches.filter((batch) => batch.work_date === today && (batch.employee_id ? expectedEmployees.some((employee) => employee.id === batch.employee_id) : true)).map((batch) => batch.employee_id || batch.employee_name));
+    const start = new Date(); start.setDate(start.getDate() - (periodDays - 1));
+    const startYmd = start.toISOString().slice(0, 10);
+    const recentBatches = backendData.reportBatches.filter((batch) => batch.work_date >= startYmd && batch.work_date <= today && (batch.employee_id ? expectedEmployees.some((employee) => employee.id === batch.employee_id) : true));
+    const expectedRecent = expectedEmployees.length * periodDays;
+    const submittedRecent = new Set(recentBatches.map((batch) => `${batch.employee_id || batch.employee_name}:${batch.work_date}`)).size;
+    return { expectedEmployees, submittedToday, missingToday: expectedEmployees.filter((employee) => !submittedToday.has(employee.id) && !submittedToday.has(employee.name)), expectedRecent, submittedRecent, recentBatches };
+  }, [backendData.employees, backendData.projectAssignments, backendData.reportBatches, visibleSummaries, employeeFilter, periodDays, today]);
+
+  const trend = useMemo(() => {
+    const points = Array.from({ length: periodDays }, (_, index) => {
+      const date = new Date(); date.setDate(date.getDate() - (periodDays - 1 - index));
+      const ymd = date.toISOString().slice(0, 10);
+      const dayActivities = backendData.activities.filter((item) => item.activity_date === ymd && visibleTasks.some(({ task }) => task.id === item.project_task_id));
+      return { date: ymd, activities: dayActivities.length, reports: reporting.recentBatches.filter((batch) => batch.work_date === ymd).length, progress: dayActivities.reduce((sum, item) => sum + Math.max(0, Number(item.new_percent) - Number(item.previous_percent)), 0) };
+    });
+    return points;
+  }, [backendData.activities, visibleTasks, reporting.recentBatches, periodDays]);
+
+  const workload = useMemo(() => backendData.employees.filter((employee) => employeeFilter === 'all' || employee.id === employeeFilter).map((employee) => {
+    const tasks = visibleTasks.filter(({ task }) => task.assigned_employee_id === employee.id).map(({ task }) => task);
+    const employeeActivities = backendData.activities.filter((item) => item.employee_id === employee.id && item.activity_date >= trend[0]?.date);
+    return { employee, active: tasks.filter((task) => !['completed', 'cancelled'].includes(task.status)).length, completed: tasks.filter((task) => task.status === 'completed').length, overdue: tasks.filter((task) => task.planned_finish && task.planned_finish < today && !['completed', 'cancelled'].includes(task.status)).length, hours: employeeActivities.reduce((sum, item) => sum + Number(item.hours_worked || 0), 0) };
+  }).filter((row) => row.active || row.completed || row.hours).sort((a, b) => b.active - a.active || b.hours - a.hours).slice(0, 12), [backendData.employees, backendData.activities, employeeFilter, visibleTasks, trend, today]);
+
   return <div className="space-y-5 print-report">
     <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5 no-print">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><div className="flex items-center gap-2 text-[#3B4636] font-bold"><BarChart3 className="w-5 h-5 text-[#B89B5E]" />Project Control Center</div><p className="text-xs text-stone-500 mt-1">Current health, risks, deadlines, and traceable activity in one management view.</p></div>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 bg-[#3B4636] text-white rounded-lg px-3 py-2 text-xs font-semibold"><Printer className="w-3.5 h-3.5" />Print executive summary</button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mt-4">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-2 mt-4">
         <label className="relative"><Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-stone-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search projects or tasks" className="w-full bg-white border border-[#DED2AC] rounded-lg pl-8 pr-2 py-2 text-xs" /></label>
         <label className="flex items-center gap-2 text-xs"><Filter className="w-3.5 h-3.5 text-[#B89B5E]" /><select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} className="flex-1 bg-white border border-[#DED2AC] rounded-lg px-2 py-2 text-xs"><option value="all">All projects</option>{backendData.projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label>
         <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="bg-white border border-[#DED2AC] rounded-lg px-2 py-2 text-xs"><option value="all">All health states</option><option value="On track">On track</option><option value="Attention">Attention</option><option value="Delayed">Delayed</option><option value="Completed">Completed</option></select>
+        <select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)} className="bg-white border border-[#DED2AC] rounded-lg px-2 py-2 text-xs"><option value="all">All employees</option>{backendData.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}</select>
+        <select value={periodDays} onChange={(event) => setPeriodDays(Number(event.target.value))} className="bg-white border border-[#DED2AC] rounded-lg px-2 py-2 text-xs"><option value={7}>Last 7 days</option><option value={14}>Last 14 days</option><option value={30}>Last 30 days</option></select>
         <div className="text-[10px] text-stone-500 flex items-center justify-end">As of {formatDate(today)}</div>
       </div>
     </div>
@@ -122,6 +155,17 @@ export const ProjectOverviewView: React.FC<{ backendData: BackendData }> = ({ ba
         ['Projects', totals.projects, 'bg-[#F3EDDD]', BarChart3], ['Tasks', totals.tasks, 'bg-white', CheckCircle2], ['Completed', totals.completed, 'bg-emerald-50', CheckCircle2], ['Blocked', totals.blocked, 'bg-orange-50', ShieldAlert], ['Overdue', totals.overdue, 'bg-red-50', AlertTriangle], ['Assigned staff', totals.staff, 'bg-blue-50', Users],
       ].map(([label, value, tone, Icon]) => <div key={String(label)} className={`${tone} border border-[#DED2AC] rounded-xl p-3`}><div className="flex items-center gap-1 text-[10px] text-stone-600"><Icon className="w-3.5 h-3.5 text-[#B89B5E]" />{label}</div><strong className="text-2xl text-[#3B4636]">{String(value)}</strong></div>)}
     </div>
+
+    <section className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-3"><div><h2 className="font-serif font-bold text-lg text-[#3B4636]">Reporting control</h2><p className="text-xs text-stone-500">Submission coverage for active project assignments.</p></div><ClipboardCheck className="w-5 h-5 text-[#B89B5E]" /></div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2"><div className="p-3 rounded-xl bg-blue-50 border border-blue-200"><div className="text-[10px] text-blue-700">Expected today</div><strong className="text-xl text-blue-800">{reporting.expectedEmployees.length}</strong></div><div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200"><div className="text-[10px] text-emerald-700">Submitted today</div><strong className="text-xl text-emerald-800">{reporting.submittedToday.size}</strong></div><div className="p-3 rounded-xl bg-red-50 border border-red-200"><div className="text-[10px] text-red-700">Missing today</div><strong className="text-xl text-red-800">{reporting.missingToday.length}</strong></div><div className="p-3 rounded-xl bg-[#F3EDDD] border border-[#DED2AC]"><div className="text-[10px] text-stone-600">Period coverage</div><strong className="text-xl text-[#3B4636]">{reporting.expectedRecent ? Math.round((reporting.submittedRecent / reporting.expectedRecent) * 100) : 0}%</strong><span className="block text-[10px] text-stone-500">{reporting.submittedRecent} / {reporting.expectedRecent} entries</span></div></div>
+      {reporting.missingToday.length > 0 && <div className="mt-3 border-t border-[#DED2AC] pt-3"><div className="text-xs font-bold text-[#9C4A3C] mb-2">Missing today</div><div className="flex flex-wrap gap-2">{reporting.missingToday.slice(0, 12).map((employee) => <span key={employee.id} className="inline-flex items-center gap-1 bg-white border border-red-200 rounded-full px-2.5 py-1 text-[10px] text-red-800"><UserCheck className="w-3 h-3" />{employee.name}</span>)}</div></div>}
+    </section>
+
+    <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5"><div className="flex items-center justify-between mb-3"><div><h2 className="font-serif font-bold text-lg text-[#3B4636]">Progress trend</h2><p className="text-xs text-stone-500">Daily activity and positive progress change.</p></div><TrendingUp className="w-5 h-5 text-[#B89B5E]" /></div><div className="flex items-end gap-1 h-28 border-b border-[#DED2AC]">{trend.map((point) => { const height = Math.min(100, point.progress * 8 + point.activities * 8); return <div key={point.date} className="flex-1 flex flex-col items-center justify-end gap-1 group"><div className="w-full max-w-8 bg-[#B89B5E] rounded-t" style={{ height: `${Math.max(4, height)}%` }} title={`${formatDate(point.date)}: ${point.progress.toFixed(1)}% progress, ${point.activities} activities`} /><span className="text-[8px] text-stone-500">{point.date.slice(5)}</span></div>; })}</div><div className="mt-3 flex justify-between text-[10px] text-stone-500"><span>{trend.reduce((sum, point) => sum + point.activities, 0)} activities</span><span>{trend.reduce((sum, point) => sum + point.progress, 0).toFixed(1)} percentage points gained</span></div></div>
+      <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5"><div className="flex items-center justify-between mb-3"><div><h2 className="font-serif font-bold text-lg text-[#3B4636]">Team workload</h2><p className="text-xs text-stone-500">Assigned work and recorded effort; not an employee ranking.</p></div><Users className="w-5 h-5 text-[#B89B5E]" /></div>{workload.length ? <div className="space-y-2">{workload.map((row) => <div key={row.employee.id} className="bg-white border border-[#DED2AC] rounded-lg p-2"><div className="flex justify-between gap-2 text-xs"><span className="font-semibold text-[#3B4636]">{row.employee.name}</span><span className="text-stone-500">{row.hours.toFixed(1)}h</span></div><div className="grid grid-cols-3 gap-2 mt-1 text-[10px] text-stone-500"><span>Active: <strong className="text-[#3B4636]">{row.active}</strong></span><span>Done: <strong className="text-emerald-700">{row.completed}</strong></span><span>Overdue: <strong className="text-red-700">{row.overdue}</strong></span></div></div>)}</div> : <p className="text-xs text-stone-500">No workload data matches the selected filters.</p>}</div>
+    </section>
 
     <section className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5">
       <div className="flex items-center justify-between mb-3"><div><h2 className="font-serif font-bold text-lg text-[#3B4636]">Needs attention</h2><p className="text-xs text-stone-500">Every item below links to the task and its latest history.</p></div><span className="text-xs font-bold text-[#9C4A3C]">{attentionItems.length} items</span></div>
