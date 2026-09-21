@@ -59,8 +59,9 @@ Reset local data from the browser console with `window.__resetOfflineData()`.
 - Team-leader project scope is "projects I created", not "projects I lead".
 - A report back-dated before a newer report for the same task still overwrites the task's current percentage.
 - Project weights are only warned about, not required to total 100% before a project runs.
-- The tests in `tests/` run against the offline mock only; nothing tests the real Postgres RPCs or
-  RLS policies yet, so the mock and the SQL can drift apart.
+- `tests/` (`npm test`) runs against the offline mock only. The Postgres side is covered separately
+  by `supabase/tests/rls_and_rpc.test.sql` (see *Database tests*), which is not part of CI yet, so the
+  mock and the SQL can still drift apart.
 - A brand-new Supabase project cannot yet be rebuilt from this repo alone (see *Database* below).
 
 React + TypeScript + Vite frontend with Supabase backend.
@@ -96,6 +97,21 @@ version (same version numbers and same SQL). Rules:
   `supabase/legacy/schema.sql`, which has not been verified to replay under the current
   migrations. Capture a real baseline with `supabase db dump --schema public` before relying on
   this repo to create a new project.
+
+## Database tests
+
+`supabase/tests/rls_and_rpc.test.sql` checks the rules on real Postgres: who may call `submit_report`
+and `override_task_completion`, what each role (anon, employee, team leader, manager) can read and
+write, the assignment and department guards, and that a failed report leaves nothing behind. It builds
+throw-away fixtures, impersonates each role with `SET LOCAL ROLE` + JWT claims, and rolls everything back.
+
+```
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_and_rpc.test.sql
+```
+
+Use a local `supabase start` database or a branch when you can. A failing check stops with its message;
+success prints `ALL RLS/RPC TESTS PASSED`. It is not wired into CI because CI has no database yet
+(that needs the baseline mentioned above).
 
 ## First-time setup (existing project)
 
