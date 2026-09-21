@@ -67,7 +67,7 @@ export const TeamLeaderDashboard: React.FC<TeamLeaderDashboardProps> = ({ backen
           <p className="text-[11px] text-stone-500 px-1">
             تظهر هنا تقارير أعضاء فريقك، وتقارير مشاريعك الخاصة من أي موظف.
           </p>
-          <ReportsView backendData={backendData} />
+          <ReportsView backendData={backendData} canLock={false} />
         </div>
       )}
 

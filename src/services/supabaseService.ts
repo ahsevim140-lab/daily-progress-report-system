@@ -63,7 +63,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     supabase.from('task_categories').select('*'),
     supabase.from('project_tasks').select('*'),
     supabase.from('task_activities').select('*').order('activity_date', { ascending: false }),
-    supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }),
+    supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, status, reviewed_by, reviewed_at, review_note, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }),
     supabase.from('report_snapshots').select('*').order('generated_at', { ascending: false }),
     supabase.from('attendance').select('*').order('attendance_date', { ascending: false }),
   ]);
@@ -83,7 +83,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     projectAssignments: (assignmentRes.data || []) as ProjectAssignment[],
     buildings: (buildRes.data || []).map((b: any) => ({ weight_percent: 0, ...b })) as Building[], areas: (areaRes.data || []).map((area: any) => ({ area_m2: 0, ...area })) as Area[], taskCategories: (taskRes.data || []).map((cat: any) => ({ ...cat, departments: cat.departments?.length ? cat.departments : (cat.department ? [cat.department] : []) })) as TaskCategory[],
     projectTasks: (ptRes.data || []).map((t: any) => ({ task: t.task || '', priority: 'normal', status: 'not_started', assigned_employee_name: employees.find((e) => e.id === t.assigned_employee_id)?.name, ...t })) as ProjectTask[],
-    activities: (activityRes.data || []) as TaskActivity[], reportBatches: (reportRes.data || []).map((row: any) => ({ id: row.id, employee_id: row.employee_id ?? null, employee_name: row.employee_name, submitted_by: row.submitted_by ?? null, project_id: row.project_id, building_id: row.building_id, work_date: row.work_date, created_at: row.created_at, project_name: row.projects?.name, building_name: row.buildings?.name, lines: (row.report_lines || []) as ReportLine[] })) as ReportBatch[], reportSnapshots: (snapshotRes.data || []) as ReportSnapshot[], attendance, loginAudits: (loginRes.data || []) as any[],
+    activities: (activityRes.data || []) as TaskActivity[], reportBatches: (reportRes.data || []).map((row: any) => ({ id: row.id, employee_id: row.employee_id ?? null, employee_name: row.employee_name, submitted_by: row.submitted_by ?? null, project_id: row.project_id, building_id: row.building_id, work_date: row.work_date, created_at: row.created_at, status: row.status || 'submitted', reviewed_by: row.reviewed_by ?? null, reviewed_at: row.reviewed_at ?? null, review_note: row.review_note ?? null, project_name: row.projects?.name, building_name: row.buildings?.name, lines: (row.report_lines || []) as ReportLine[] })) as ReportBatch[], reportSnapshots: (snapshotRes.data || []) as ReportSnapshot[], attendance, loginAudits: (loginRes.data || []) as any[],
   };
 }
 
@@ -148,8 +148,14 @@ export async function submitReport(projectGroups: DraftProjectGroup[], options: 
   return data as string[];
 }
 export async function fetchReportBatches(): Promise<ReportBatch[]> {
-  const { data, error } = await supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }); if (error) throw error;
-  return (data || []).map((row: any) => ({ id: row.id, employee_id: row.employee_id ?? null, employee_name: row.employee_name, submitted_by: row.submitted_by ?? null, project_id: row.project_id, building_id: row.building_id, work_date: row.work_date, created_at: row.created_at, project_name: row.projects?.name, building_name: row.buildings?.name, lines: (row.report_lines || []) as ReportLine[] }));
+  const { data, error } = await supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, status, reviewed_by, reviewed_at, review_note, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }); if (error) throw error;
+  return (data || []).map((row: any) => ({ id: row.id, employee_id: row.employee_id ?? null, employee_name: row.employee_name, submitted_by: row.submitted_by ?? null, project_id: row.project_id, building_id: row.building_id, work_date: row.work_date, created_at: row.created_at, status: row.status || 'submitted', reviewed_by: row.reviewed_by ?? null, reviewed_at: row.reviewed_at ?? null, review_note: row.review_note ?? null, project_name: row.projects?.name, building_name: row.buildings?.name, lines: (row.report_lines || []) as ReportLine[] }));
+}
+
+export async function reviewReportBatch(batchId: string, status: 'returned' | 'approved' | 'locked', note?: string) {
+  const { data, error } = await supabase.rpc('review_report_batch', { p_batch_id: batchId, p_status: status, p_note: note || null });
+  if (error) throw error;
+  return data as ReportBatch;
 }
 
 export async function createReportSnapshot(payload: Omit<ReportSnapshot, 'id' | 'generated_by' | 'generated_at'>) {

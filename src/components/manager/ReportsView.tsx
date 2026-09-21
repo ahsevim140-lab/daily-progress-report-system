@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackendData, ReportBatch } from '../../types';
-import { fetchReportBatches } from '../../services/supabaseService';
+import { BackendData, ReportBatch, ReportStatus } from '../../types';
+import { fetchReportBatches, reviewReportBatch } from '../../services/supabaseService';
 import { formatArabicDate, toLocalYMD, exportBatchesToCSV } from '../../utils';
 import {
   RefreshCw,
@@ -11,13 +11,17 @@ import {
   AlertTriangle,
   TrendingDown,
   Minus,
+  CheckCircle2,
+  RotateCcw,
+  LockKeyhole,
 } from 'lucide-react';
 
 interface ReportsViewProps {
   backendData: BackendData;
+  canLock?: boolean;
 }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
+export const ReportsView: React.FC<ReportsViewProps> = ({ backendData, canLock = true }) => {
   const [batches, setBatches] = useState<ReportBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -26,6 +30,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
   const [filterProject, setFilterProject] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<ReportStatus | ''>('');
+  const [reviewing, setReviewing] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -56,6 +62,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
     return batches.filter((b) => {
       if (filterProject && b.project_id !== filterProject) return false;
       if (filterDate && b.work_date !== filterDate) return false;
+      if (filterStatus && b.status !== filterStatus) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const combined = `${b.employee_name} ${b.project_name} ${b.building_name} ${b.lines
@@ -65,7 +72,21 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
       }
       return true;
     });
-  }, [batches, filterProject, filterDate, searchTerm]);
+  }, [batches, filterProject, filterDate, filterStatus, searchTerm]);
+
+  const reviewCounts = useMemo(() => batches.reduce((counts, batch) => { counts[batch.status] += 1; return counts; }, { submitted: 0, returned: 0, approved: 0, locked: 0 } as Record<ReportStatus, number>), [batches]);
+
+  const review = async (batch: ReportBatch, status: 'returned' | 'approved' | 'locked') => {
+    const note = status === 'returned' ? window.prompt('Why does this report need correction?') : undefined;
+    if (status === 'returned' && !note?.trim()) return;
+    setReviewing(batch.id);
+    try {
+      const updated = await reviewReportBatch(batch.id, status, note);
+      setBatches((current) => current.map((item) => item.id === batch.id ? { ...item, ...updated, status, review_note: note || null } : item));
+    } catch (err: any) {
+      setError(err.message || 'Unable to review this report.');
+    } finally { setReviewing(null); }
+  };
 
   const batchSeverity = (b: ReportBatch): 'regressed' | 'stalled' | 'none' => {
     if (b.lines.some((l) => l.flag === 'regressed')) return 'regressed';
@@ -101,6 +122,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
           className="bg-white border border-[#DED2AC] rounded-lg px-2.5 py-1.5 text-xs text-stone-900"
         />
 
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as ReportStatus | '')} className="bg-white border border-[#DED2AC] rounded-lg px-2.5 py-1.5 text-xs text-stone-900">
+          <option value="">كل الحالات</option><option value="submitted">Submitted ({reviewCounts.submitted})</option><option value="returned">Returned ({reviewCounts.returned})</option><option value="approved">Approved ({reviewCounts.approved})</option><option value="locked">Locked ({reviewCounts.locked})</option>
+        </select>
+
         <div className="relative flex-1 min-w-[180px]">
           <Search className="w-4 h-4 text-stone-400 absolute right-3 top-2" />
           <input
@@ -132,6 +157,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
       {error && (
         <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs">{error}</div>
       )}
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {([['submitted', 'Needs review', 'bg-blue-50 border-blue-200 text-blue-800'], ['returned', 'Needs correction', 'bg-red-50 border-red-200 text-red-800'], ['approved', 'Approved', 'bg-emerald-50 border-emerald-200 text-emerald-800'], ['locked', 'Locked', 'bg-stone-100 border-stone-300 text-stone-800']] as [ReportStatus, string, string][]).map(([status, label, classes]) => <button type="button" key={status} onClick={() => setFilterStatus(filterStatus === status ? '' : status)} className={`${classes} border rounded-xl p-3 text-left`}><div className="text-[10px]">{label}</div><strong className="text-xl">{reviewCounts[status]}</strong></button>)}
+      </div>
 
       <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 shadow-sm space-y-2">
         <div className="text-xs font-bold text-[#3B4636] uppercase tracking-wider pb-2 border-b border-[#DED2AC]">
@@ -196,6 +225,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
                       )}
                     </div>
                   ))}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#DED2AC] pt-2">
+                    <div className="text-[10px] text-stone-500">Status: <strong>{b.status}</strong>{b.review_note ? ` · ${b.review_note}` : ''}</div>
+                    {b.status !== 'locked' && <div className="flex gap-1.5"><button type="button" disabled={reviewing === b.id} onClick={() => review(b, 'returned')} className="px-2 py-1 rounded bg-red-100 text-red-800 text-[10px] font-bold flex items-center gap-1"><RotateCcw className="w-3 h-3" />Return</button><button type="button" disabled={reviewing === b.id} onClick={() => review(b, 'approved')} className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Approve</button>{canLock && <button type="button" disabled={reviewing === b.id} onClick={() => review(b, 'locked')} className="px-2 py-1 rounded bg-stone-200 text-stone-800 text-[10px] font-bold flex items-center gap-1"><LockKeyhole className="w-3 h-3" />Lock</button>}</div>}
+                  </div>
                 </div>
               )}
             </div>

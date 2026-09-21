@@ -38,6 +38,7 @@ export interface DraftProjectGroup { id: string; projectId: string; department: 
 export interface ReportLine { id: string; batch_id: string; department: string; task: string; project_task_id?: string | null; percentage: number; previous_percentage: number; flag: ReportFlag; note: string | null; }
 // work_date = the day the work was done; created_at = when the report was submitted (they can differ).
 // employee_id is the reporting employee; submitted_by is the account that pressed submit (differs when a manager reports on someone's behalf).
-export interface ReportBatch { id: string; employee_id?: string | null; employee_name: string; submitted_by?: string | null; project_id: string; building_id: string; work_date: string; created_at: string; project_name?: string; building_name?: string; lines: ReportLine[]; }
+export type ReportStatus = 'submitted' | 'returned' | 'approved' | 'locked';
+export interface ReportBatch { id: string; employee_id?: string | null; employee_name: string; submitted_by?: string | null; project_id: string; building_id: string; work_date: string; created_at: string; status: ReportStatus; reviewed_by?: string | null; reviewed_at?: string | null; review_note?: string | null; project_name?: string; building_name?: string; lines: ReportLine[]; }
 export type ReportSnapshotType = 'executive_summary' | 'detailed_project' | 'monthly' | 'employee_activity' | 'project_completion';
 export interface ReportSnapshot { id: string; report_type: ReportSnapshotType; title: string; period_start: string; period_end: string; filters: Record<string, unknown>; summary: Record<string, unknown>; details: unknown[]; generated_by: string; generated_at: string; }
