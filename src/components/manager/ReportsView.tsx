@@ -1,240 +1,42 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { BackendData, ReportBatch, ReportStatus } from '../../types';
-import { fetchReportBatches, reviewReportBatch } from '../../services/supabaseService';
-import { formatArabicDate, toLocalYMD, exportBatchesToCSV } from '../../utils';
-import {
-  RefreshCw,
-  Search,
-  Download,
-  ChevronDown,
-  ChevronUp,
-  AlertTriangle,
-  TrendingDown,
-  Minus,
-  CheckCircle2,
-  RotateCcw,
-  LockKeyhole,
-} from 'lucide-react';
+import { BackendData, ReportBatch } from '../../types';
+import { fetchReportBatches } from '../../services/supabaseService';
+import { todayLocalYMD } from '../../utils';
+import { Download, FileSpreadsheet, RefreshCw, Search, Users } from 'lucide-react';
 
-interface ReportsViewProps {
-  backendData: BackendData;
-  canLock?: boolean;
-}
+interface ReportsViewProps { backendData: BackendData; }
 
-export const ReportsView: React.FC<ReportsViewProps> = ({ backendData, canLock = true }) => {
-  const [batches, setBatches] = useState<ReportBatch[]>([]);
-  const [loading, setLoading] = useState(true);
+function escapeHtml(value: unknown) { return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+
+export const ReportsView: React.FC<ReportsViewProps> = ({ backendData }) => {
+  const [batches, setBatches] = useState<ReportBatch[]>(backendData.reportBatches);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-
-  const [filterProject, setFilterProject] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [selectedDate, setSelectedDate] = useState(todayLocalYMD());
+  const [projectId, setProjectId] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<ReportStatus | ''>('');
-  const [reviewing, setReviewing] = useState<string | null>(null);
 
   const load = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await fetchReportBatches();
-      setBatches(data);
-    } catch (err: any) {
-      setError(err.message || 'تعذر تحميل التقارير.');
-    } finally {
-      setLoading(false);
-    }
+    setLoading(true); setError('');
+    try { setBatches(await fetchReportBatches()); } catch (err: any) { setError(err.message || 'Unable to load report submissions.'); } finally { setLoading(false); }
+  };
+  useEffect(() => { setBatches(backendData.reportBatches); }, [backendData.reportBatches]);
+
+  const activeEmployees = useMemo(() => {
+    const eligibleProjectIds = new Set(backendData.projects.filter((project) => projectId === 'all' ? !['completed', 'stopped', 'not_wanted'].includes(project.status) : project.id === projectId).map((project) => project.id));
+    const employeeIds = new Set(backendData.projectAssignments.filter((assignment) => eligibleProjectIds.has(assignment.project_id)).map((assignment) => assignment.employee_id));
+    return backendData.employees.filter((employee) => employeeIds.has(employee.id));
+  }, [backendData.employees, backendData.projectAssignments, backendData.projects, projectId]);
+
+  const submittedIds = useMemo(() => new Set(batches.filter((batch) => batch.work_date === selectedDate && (projectId === 'all' || batch.project_id === projectId)).map((batch) => batch.employee_id || batch.employee_name)), [batches, selectedDate, projectId]);
+  const missing = useMemo(() => activeEmployees.filter((employee) => !submittedIds.has(employee.id) && !submittedIds.has(employee.name)).filter((employee) => !searchTerm.trim() || `${employee.name} ${employee.department}`.toLowerCase().includes(searchTerm.toLowerCase())), [activeEmployees, submittedIds, searchTerm]);
+
+  const downloadExcel = () => {
+    const rows = missing.map((employee, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(employee.name)}</td><td>${escapeHtml(employee.department)}</td><td>${escapeHtml(selectedDate)}</td><td>Not submitted</td></tr>`).join('');
+    const html = `<html><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Arial}th,td{border:1px solid #999;padding:8px}th{background:#3B4636;color:#fff}</style></head><body><h2>Daily Report Missing Submissions</h2><p>Date: ${escapeHtml(selectedDate)}</p><p>Project: ${escapeHtml(projectId === 'all' ? 'All active projects' : backendData.projects.find((project) => project.id === projectId)?.name)}</p><table><thead><tr><th>No.</th><th>Employee</th><th>Department</th><th>Selected date</th><th>Status</th></tr></thead><tbody>${rows || '<tr><td colspan="5">All assigned employees submitted a report.</td></tr>'}</tbody></table></body></html>`;
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `missing_daily_reports_${selectedDate}.xls`; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  const toggleExpand = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const filtered = useMemo(() => {
-    return batches.filter((b) => {
-      if (filterProject && b.project_id !== filterProject) return false;
-      if (filterDate && b.work_date !== filterDate) return false;
-      if (filterStatus && b.status !== filterStatus) return false;
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        const combined = `${b.employee_name} ${b.project_name} ${b.building_name} ${b.lines
-          .map((l) => `${l.department} ${l.task} ${l.note || ''}`)
-          .join(' ')}`.toLowerCase();
-        if (!combined.includes(term)) return false;
-      }
-      return true;
-    });
-  }, [batches, filterProject, filterDate, filterStatus, searchTerm]);
-
-  const reviewCounts = useMemo(() => batches.reduce((counts, batch) => { counts[batch.status] += 1; return counts; }, { submitted: 0, returned: 0, approved: 0, locked: 0 } as Record<ReportStatus, number>), [batches]);
-
-  const review = async (batch: ReportBatch, status: 'returned' | 'approved' | 'locked') => {
-    const note = status === 'returned' ? window.prompt('Why does this report need correction?') : undefined;
-    if (status === 'returned' && !note?.trim()) return;
-    setReviewing(batch.id);
-    try {
-      const updated = await reviewReportBatch(batch.id, status, note);
-      setBatches((current) => current.map((item) => item.id === batch.id ? { ...item, ...updated, status, review_note: note || null } : item));
-    } catch (err: any) {
-      setError(err.message || 'Unable to review this report.');
-    } finally { setReviewing(null); }
-  };
-
-  const batchSeverity = (b: ReportBatch): 'regressed' | 'stalled' | 'none' => {
-    if (b.lines.some((l) => l.flag === 'regressed')) return 'regressed';
-    if (b.lines.some((l) => l.flag === 'stalled')) return 'stalled';
-    return 'none';
-  };
-
-  const rowClass = (severity: 'regressed' | 'stalled' | 'none') =>
-    severity === 'regressed'
-      ? 'bg-red-50 border-red-200'
-      : severity === 'stalled'
-      ? 'bg-amber-50 border-amber-200'
-      : 'bg-white border-[#DED2AC]';
-
-  return (
-    <div className="space-y-4">
-      <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 shadow-sm flex flex-wrap items-center gap-3">
-        <select
-          value={filterProject}
-          onChange={(e) => setFilterProject(e.target.value)}
-          className="bg-white border border-[#DED2AC] rounded-lg px-2.5 py-1.5 text-xs text-stone-900"
-        >
-          <option value="">كل المشاريع</option>
-          {backendData.projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
-
-        <input
-          type="date"
-          value={filterDate}
-          onChange={(e) => setFilterDate(e.target.value)}
-          className="bg-white border border-[#DED2AC] rounded-lg px-2.5 py-1.5 text-xs text-stone-900"
-        />
-
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as ReportStatus | '')} className="bg-white border border-[#DED2AC] rounded-lg px-2.5 py-1.5 text-xs text-stone-900">
-          <option value="">كل الحالات</option><option value="submitted">Submitted ({reviewCounts.submitted})</option><option value="returned">Returned ({reviewCounts.returned})</option><option value="approved">Approved ({reviewCounts.approved})</option><option value="locked">Locked ({reviewCounts.locked})</option>
-        </select>
-
-        <div className="relative flex-1 min-w-[180px]">
-          <Search className="w-4 h-4 text-stone-400 absolute right-3 top-2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="بحث..."
-            className="w-full pr-9 pl-3 py-1.5 bg-white border border-[#DED2AC] rounded-lg text-xs text-stone-900"
-          />
-        </div>
-
-        <button
-          onClick={load}
-          className="px-3 py-1.5 bg-[#3B4636] text-[#F2EEDD] rounded-lg text-xs font-medium flex items-center gap-1.5"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          تحديث
-        </button>
-
-        <button
-          onClick={() => exportBatchesToCSV(filtered)}
-          className="px-3 py-1.5 bg-white border border-[#DED2AC] text-[#3B4636] rounded-lg text-xs font-medium flex items-center gap-1.5"
-        >
-          <Download className="w-3.5 h-3.5" />
-          تصدير CSV
-        </button>
-      </div>
-
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-800 rounded-xl text-xs">{error}</div>
-      )}
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {([['submitted', 'Needs review', 'bg-blue-50 border-blue-200 text-blue-800'], ['returned', 'Needs correction', 'bg-red-50 border-red-200 text-red-800'], ['approved', 'Approved', 'bg-emerald-50 border-emerald-200 text-emerald-800'], ['locked', 'Locked', 'bg-stone-100 border-stone-300 text-stone-800']] as [ReportStatus, string, string][]).map(([status, label, classes]) => <button type="button" key={status} onClick={() => setFilterStatus(filterStatus === status ? '' : status)} className={`${classes} border rounded-xl p-3 text-left`}><div className="text-[10px]">{label}</div><strong className="text-xl">{reviewCounts[status]}</strong></button>)}
-      </div>
-
-      <div className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-4 shadow-sm space-y-2">
-        <div className="text-xs font-bold text-[#3B4636] uppercase tracking-wider pb-2 border-b border-[#DED2AC]">
-          سجل التقارير ({filtered.length})
-        </div>
-
-        {filtered.length === 0 && !loading && (
-          <div className="text-center text-xs text-stone-500 py-8">لا توجد تقارير مطابقة.</div>
-        )}
-
-        {filtered.map((b) => {
-          const severity = batchSeverity(b);
-          const isOpen = expanded.has(b.id);
-          return (
-            <div key={b.id} className={`border rounded-xl overflow-hidden ${rowClass(severity)}`}>
-              <button
-                type="button"
-                onClick={() => toggleExpand(b.id)}
-                className="w-full flex items-center justify-between p-3 text-right"
-              >
-                <div className="flex items-center gap-3 text-xs">
-                  {severity === 'regressed' && <TrendingDown className="w-4 h-4 text-red-600 shrink-0" />}
-                  {severity === 'stalled' && <Minus className="w-4 h-4 text-amber-600 shrink-0" />}
-                  <span className="font-mono text-stone-500 whitespace-nowrap" title="تاريخ العمل">{b.work_date}</span>
-                  {b.work_date !== toLocalYMD(b.created_at) && (
-                    <span className="text-[10px] text-stone-400 whitespace-nowrap" title="وقت الإرسال">أُرسل {formatArabicDate(b.created_at)}</span>
-                  )}
-                  <span className="font-bold text-stone-900">{b.employee_name}</span>
-                  <span className="text-stone-700">{b.project_name}</span>
-                  <span className="text-stone-500">/ {b.building_name}</span>
-                  <span className="text-[11px] bg-white border border-[#DED2AC] px-2 py-0.5 rounded-full text-stone-600">
-                    {b.lines.length} {b.lines.length === 1 ? 'مهمة' : 'مهام'}
-                  </span>
-                </div>
-                {isOpen ? <ChevronUp className="w-4 h-4 text-stone-500" /> : <ChevronDown className="w-4 h-4 text-stone-500" />}
-              </button>
-
-              {isOpen && (
-                <div className="px-3 pb-3 space-y-2">
-                  {b.lines.map((l) => (
-                    <div
-                      key={l.id}
-                      className={`text-xs p-2.5 rounded-lg border flex flex-col gap-1 ${
-                        l.flag === 'regressed'
-                          ? 'bg-red-100/60 border-red-300'
-                          : l.flag === 'stalled'
-                          ? 'bg-amber-100/60 border-amber-300'
-                          : 'bg-white border-[#DED2AC]'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between flex-wrap gap-1">
-                        <span className="font-semibold text-stone-900">{l.department} — {l.task}</span>
-                        <span className="font-mono text-stone-600">
-                          {l.previous_percentage}% → <strong>{l.percentage}%</strong>
-                        </span>
-                      </div>
-                      {l.note && (
-                        <div className="flex items-start gap-1.5 text-stone-700">
-                          {l.flag !== 'none' && <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600" />}
-                          <span>{l.note}</span>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#DED2AC] pt-2">
-                    <div className="text-[10px] text-stone-500">Status: <strong>{b.status}</strong>{b.review_note ? ` · ${b.review_note}` : ''}</div>
-                    {b.status !== 'locked' && <div className="flex gap-1.5"><button type="button" disabled={reviewing === b.id} onClick={() => review(b, 'returned')} className="px-2 py-1 rounded bg-red-100 text-red-800 text-[10px] font-bold flex items-center gap-1"><RotateCcw className="w-3 h-3" />Return</button><button type="button" disabled={reviewing === b.id} onClick={() => review(b, 'approved')} className="px-2 py-1 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" />Approve</button>{canLock && <button type="button" disabled={reviewing === b.id} onClick={() => review(b, 'locked')} className="px-2 py-1 rounded bg-stone-200 text-stone-800 text-[10px] font-bold flex items-center gap-1"><LockKeyhole className="w-3 h-3" />Lock</button>}</div>}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return <div className="space-y-5"><section className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-[#3B4636] font-bold"><FileSpreadsheet className="w-5 h-5 text-[#B89B5E]" />Daily report submission check</div><p className="text-xs text-stone-500 mt-1">This tab shows only employees who did not submit a report for the selected date. Submitted, approved, and locked reports are intentionally hidden.</p></div><button type="button" onClick={downloadExcel} className="inline-flex items-center gap-2 bg-[#3B4636] text-white rounded-lg px-3 py-2 text-xs font-semibold"><Download className="w-3.5 h-3.5" />Download Excel report</button></div><div className="grid grid-cols-1 md:grid-cols-4 gap-2 mt-5"><label className="text-xs text-stone-600">Selected date<input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} className="mt-1 w-full bg-white border border-[#DED2AC] rounded-lg px-2 py-2 text-xs" /></label><label className="text-xs text-stone-600">Project<select value={projectId} onChange={(event) => setProjectId(event.target.value)} className="mt-1 w-full bg-white border border-[#DED2AC] rounded-lg px-2 py-2 text-xs"><option value="all">All active projects</option>{backendData.projects.filter((project) => !['completed', 'stopped', 'not_wanted'].includes(project.status)).map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label><label className="text-xs text-stone-600">Search employee<div className="relative mt-1"><Search className="absolute left-2 top-2 w-3.5 h-3.5 text-stone-400" /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Name or department" className="w-full bg-white border border-[#DED2AC] rounded-lg pl-7 pr-2 py-2 text-xs" /></div></label><div className="flex items-end"><button type="button" onClick={load} className="inline-flex items-center gap-2 bg-white border border-[#DED2AC] text-[#3B4636] rounded-lg px-3 py-2 text-xs font-semibold"><RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />Refresh submissions</button></div></div>{error && <div className="mt-3 p-2 bg-red-50 border border-red-200 text-red-800 rounded-lg text-xs">{error}</div>}</section><section className="bg-[#FBF8EF] border border-[#DED2AC] rounded-2xl p-5"><div className="flex items-center justify-between mb-4"><div><h2 className="font-serif font-bold text-lg text-[#3B4636]">Employees who did not submit</h2><p className="text-xs text-stone-500">{selectedDate} · {projectId === 'all' ? 'All active projects' : backendData.projects.find((project) => project.id === projectId)?.name}</p></div><div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2"><Users className="w-4 h-4 text-red-700" /><strong className="text-xl text-red-800">{missing.length}</strong></div></div>{missing.length ? <div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="border-b border-[#DED2AC] text-stone-500"><th className="p-2">No.</th><th className="p-2">Employee</th><th className="p-2">Department</th><th className="p-2">Date</th><th className="p-2">Status</th></tr></thead><tbody>{missing.map((employee, index) => <tr key={employee.id} className="border-b border-[#DED2AC]/60"><td className="p-2">{index + 1}</td><td className="p-2 font-semibold text-[#3B4636]">{employee.name}</td><td className="p-2">{employee.department}</td><td className="p-2">{selectedDate}</td><td className="p-2 text-red-700 font-semibold">Not submitted</td></tr>)}</tbody></table></div> : <div className="text-center py-10 text-sm text-emerald-700">All assigned employees submitted a report for this date.</div>}</section></div>;
 };
