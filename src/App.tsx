@@ -20,6 +20,7 @@ const EMPTY_DATA: BackendData = {
   areas: [],
   projectTasks: [],
   activities: [],
+  blockers: [],
   reportBatches: [],
   reportSnapshots: [],
   attendance: [],
