@@ -34,6 +34,8 @@ interface MockDB {
   attendance: Row[];
   report_batches: Row[];
   report_lines: Row[];
+  report_snapshots: Row[];
+  task_blockers: Row[];
   login_audits: Row[];
   users: Row[]; // combines auth + profile + app-user fields
 }
@@ -147,6 +149,8 @@ function seedDB(): MockDB {
     attendance: [],
     report_batches: [],
     report_lines: [],
+    report_snapshots: [],
+    task_blockers: [],
     login_audits: [],
     users,
   };
@@ -163,6 +167,8 @@ function loadDB(): MockDB {
       loaded.task_activities ||= [];
       loaded.report_batches ||= [];
       loaded.report_lines ||= [];
+      loaded.report_snapshots ||= [];
+      loaded.task_blockers ||= [];
       loaded.login_audits ||= [];
       loaded.projects = (loaded.projects || []).map((p) => ({ status: 'running', ...p }));
       loaded.buildings = (loaded.buildings || []).map((b) => ({ weight_percent: 0, ...b }));
@@ -339,6 +345,10 @@ class MockQueryBuilder {
             building_id: batch.building_id,
             work_date: batch.work_date ?? toLocalYMD(batch.created_at),
             created_at: batch.created_at,
+            status: batch.status || 'submitted',
+            reviewed_by: batch.reviewed_by ?? null,
+            reviewed_at: batch.reviewed_at ?? null,
+            review_note: batch.review_note ?? null,
             projects: db.projects.find((p) => p.id === batch.project_id) ? { name: db.projects.find((p) => p.id === batch.project_id)!.name } : null,
             buildings: db.buildings.find((b) => b.id === batch.building_id) ? { name: db.buildings.find((b) => b.id === batch.building_id)!.name } : null,
             report_lines: db.report_lines
@@ -362,6 +372,19 @@ class MockQueryBuilder {
       }
 
       let rows = (db[sourceTable] as Row[]).filter((r) => this.matches(r));
+      if (this.table === 'report_snapshots') {
+        const user = currentUser();
+        rows = rows.filter(() => user?.role === 'manager');
+      }
+      if (this.table === 'task_blockers') {
+        const user = currentUser();
+        rows = rows.filter((blocker) => {
+          if (!user) return false;
+          if (user.role === 'manager') return true;
+          if (blocker.owner_employee_id && blocker.owner_employee_id === user.employee_id) return true;
+          return user.role === 'team_leader' && db.users.some((member) => member.employee_id === blocker.owner_employee_id && member.team_leader_id === user.id);
+        });
+      }
       if ((this.table as string) === 'profiles') {
         const user = currentUser();
         rows = rows
@@ -385,6 +408,9 @@ class MockQueryBuilder {
         ...item,
       }));
       if (this.table === 'projects') items.forEach((item) => { item.created_by ??= currentUser()?.id ?? null; });
+      if (this.table === 'report_batches') items.forEach((item) => { item.status ??= 'submitted'; });
+      if (this.table === 'report_snapshots') items.forEach((item) => { item.generated_by ??= currentUser()?.id ?? null; item.generated_at ??= new Date().toISOString(); });
+      if (this.table === 'task_blockers') items.forEach((item) => { item.status ??= 'open'; item.created_at ??= new Date().toISOString(); item.updated_at ??= item.created_at; });
       (db[sourceTable] as Row[]).push(...items);
       if (this.table === 'areas') items.forEach((item) => { const building = db.buildings.find((row) => row.id === item.building_id); if (building) recalculateBuildingWeights(building.project_id); });
       saveDB(db);
@@ -545,6 +571,31 @@ function rpcOverrideTaskCompletion(params: Record<string, any>): null {
   return null;
 }
 
+function rpcReviewReportBatch(params: Record<string, any>) {
+  const caller = currentUser();
+  if (!caller || !['manager', 'team_leader'].includes(caller.role)) throw new RpcError('Only managers and team leaders can review reports.');
+  const batch = db.report_batches.find((item) => item.id === params.p_batch_id);
+  if (!batch) throw new RpcError('Report not found.');
+  if (batch.status === 'locked') throw new RpcError('Locked reports cannot be changed.');
+  if (!['returned', 'approved', 'locked'].includes(params.p_status)) throw new RpcError('Invalid review status.');
+  if (params.p_status === 'returned' && !String(params.p_note || '').trim()) throw new RpcError('A reason is required when returning a report.');
+  if (params.p_status === 'locked' && caller.role !== 'manager') throw new RpcError('Only a manager can lock a report.');
+  Object.assign(batch, { status: params.p_status, reviewed_by: caller.id, reviewed_at: new Date().toISOString(), review_note: String(params.p_note || '').trim() || null });
+  return batch;
+}
+
+function rpcUpdateTaskBlocker(params: Record<string, any>) {
+  const caller = currentUser();
+  if (!caller || !['manager', 'team_leader'].includes(caller.role)) throw new RpcError('Only managers and team leaders can update blockers.');
+  const blocker = db.task_blockers.find((item) => item.id === params.p_blocker_id);
+  if (!blocker) throw new RpcError('Blocker not found.');
+  if (!['open', 'in_progress', 'resolved', 'dismissed'].includes(params.p_status)) throw new RpcError('Invalid blocker status.');
+  if (['resolved', 'dismissed'].includes(params.p_status) && !String(params.p_note || '').trim()) throw new RpcError('A resolution note is required.');
+  Object.assign(blocker, { status: params.p_status, owner_employee_id: params.p_owner_employee_id || blocker.owner_employee_id || null, resolution_note: String(params.p_note || '').trim() || null, updated_at: new Date().toISOString() });
+  if (['resolved', 'dismissed'].includes(params.p_status)) { blocker.resolved_by = caller.id; blocker.resolved_at = new Date().toISOString(); } else { blocker.resolved_by = null; blocker.resolved_at = null; }
+  return blocker;
+}
+
 export const mockSupabase = {
   auth: {
     async signInWithPassword({ email, password }: { email: string; password: string }) {
@@ -577,6 +628,8 @@ export const mockSupabase = {
     const handlers: Record<string, (p: Record<string, any>) => any> = {
       submit_report: rpcSubmitReport,
       override_task_completion: rpcOverrideTaskCompletion,
+      review_report_batch: rpcReviewReportBatch,
+      update_task_blocker: rpcUpdateTaskBlocker,
     };
     const handler = handlers[fnName];
     if (!handler) return { data: null, error: { message: `Unknown mock rpc: ${fnName}` } };
