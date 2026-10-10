@@ -5,7 +5,7 @@ export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 // Projects in these statuses no longer accept daily progress. Shared by the report form
 // (hides them) and the backend (rejects them) so the two cannot drift apart.
 export const PROGRESS_CLOSED_STATUSES: ProjectStatus[] = ['completed', 'stopped', 'not_wanted'];
-export type AttendanceStatus = 'present' | 'late' | 'day_off' | 'hours_off' | 'absent';
+export type AttendanceStatus = 'not_recorded' | 'present' | 'late' | 'day_off' | 'hours_off' | 'absent';
 export interface Department { id: string; name: string; active?: boolean; }
 export interface Employee { id: string; department: string; name: string; username?: string | null; }
 export interface TaskCategory { id: string; main: string; subs: string[]; department?: string | null; departments?: string[]; is_general?: boolean; }
