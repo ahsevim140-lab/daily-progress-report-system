@@ -23,7 +23,7 @@ const login = async (username: string, password: string) => {
 };
 const rows = async (table: string): Promise<any[]> => (await api.from(table)).data;
 const line = (department: string, task: string, percentage: number, extra: Record<string, unknown> = {}) =>
-  ({ department, task, percentage, activity: 'did some work', hours_worked: null, blocker: null, note: null, ...extra });
+  ({ department, category: 'عام', task, percentage, activity: 'did some work', hours_worked: null, blocker: null, note: null, ...extra });
 
 let ctx: { project: any; building: any; otherProject: any; employees: any[]; users: Record<string, any> };
 

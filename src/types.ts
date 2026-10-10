@@ -37,7 +37,7 @@ export interface DraftTaskLine { id: string; category: string; task: string; per
 export interface DraftBuildingGroup { id: string; buildingId: string; lines: DraftTaskLine[]; }
 export interface DraftProjectGroup { id: string; projectId: string; department: string; buildings: DraftBuildingGroup[]; }
 // percentage / previous_percentage / flag are read from the linked task activity, not stored on the line.
-export interface ReportLine { id: string; batch_id: string; department: string; task: string; project_task_id?: string | null; percentage: number; previous_percentage: number; flag: ReportFlag; note: string | null; }
+export interface ReportLine { id: string; batch_id: string; department: string; category?: string | null; task: string; project_task_id?: string | null; percentage: number; previous_percentage: number; flag: ReportFlag; note: string | null; }
 // work_date = the day the work was done; created_at = when the report was submitted (they can differ).
 // employee_id is the reporting employee; submitted_by is the account that pressed submit (differs when a manager reports on someone's behalf).
 export type ReportStatus = 'submitted' | 'returned' | 'approved' | 'locked';

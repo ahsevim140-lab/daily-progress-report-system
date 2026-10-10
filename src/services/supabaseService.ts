@@ -66,7 +66,7 @@ export async function fetchBackendData(): Promise<BackendData> {
     supabase.from('project_tasks').select('*'),
     supabase.from('task_activities').select('*').order('activity_date', { ascending: false }),
     supabase.from('task_blockers').select('*').order('updated_at', { ascending: false }),
-    supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, status, reviewed_by, reviewed_at, review_note, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }),
+    supabase.from('report_batches').select(`id, employee_id, employee_name, submitted_by, project_id, building_id, work_date, created_at, status, reviewed_by, reviewed_at, review_note, projects ( name ), buildings ( name ), report_lines ( id, batch_id, department, category, task, project_task_id, percentage, previous_percentage, flag, note )`).order('created_at', { ascending: false }),
     supabase.from('report_snapshots').select('*').order('generated_at', { ascending: false }),
     supabase.from('attendance').select('*').order('attendance_date', { ascending: false }),
   ]);
@@ -143,6 +143,7 @@ export async function submitReport(projectGroups: DraftProjectGroup[], options: 
       building_id: bg.buildingId,
       lines: bg.lines.map((l) => ({
         department: options.department,
+        category: l.category,
         task: l.task,
         percentage: Number(l.percentage),
         note: l.note.trim() || null,

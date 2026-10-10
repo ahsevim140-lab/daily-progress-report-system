@@ -463,7 +463,7 @@ function findUserByUsername(username: string) {
 // The reporting employee is NEVER taken from the request: it is the employee linked to the
 // signed-in account, unless a manager explicitly reports on someone's behalf.
 // ---------------------------------------------------------------------------
-type ReportLineInput = { department: string; task: string; percentage: number; note?: string | null };
+type ReportLineInput = { department: string; category?: string; task: string; percentage: number; note?: string | null };
 type ReportGroupInput = { project_id: string; building_id: string; lines: ReportLineInput[] };
 
 function rpcSubmitReport(params: Record<string, any>): string[] {
@@ -504,7 +504,7 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
     batchIds.push(batchId);
 
     for (const line of group.lines) {
-      if (!line.department || !line.task) throw new RpcError('Each task line needs a department and a task.');
+      if (!line.department || !line.category || !line.task) throw new RpcError('Each task line needs a department, category, and task.');
       if (caller.role !== 'manager' && line.department !== employee.department) throw new RpcError('Employees may only report tasks from their own department.');
       const percentage = Number(line.percentage);
       if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) throw new RpcError('Percentage must be a number between 0 and 100.');
@@ -514,6 +514,7 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
       const inBuilding = (t: Row) => t.project_id === project.id && t.building_id === building.id && t.department === line.department;
       let task = db.project_tasks.find((t) => inBuilding(t) && t.task === line.task) ?? db.project_tasks.find((t) => inBuilding(t) && !t.task);
 
+      if (task?.category && task.category !== line.category) throw new RpcError('The selected task does not belong to the selected category.');
       if (task?.assigned_employee_id && task.assigned_employee_id !== employee.id) throw new RpcError(`"${task.task || task.department}" is assigned to another employee.`);
       if (task?.status === 'cancelled') throw new RpcError(`"${task.task || task.department}" is cancelled and cannot receive progress.`);
 
@@ -521,13 +522,18 @@ function rpcSubmitReport(params: Record<string, any>): string[] {
       if (deriveFlag(previous, percentage) !== 'none' && !note) throw new RpcError('A reason is required when progress is unchanged or reduced.');
 
       if (!task) {
-        task = { id: uid(), project_id: project.id, building_id: building.id, department: line.department, task: line.task, weight_percent: 0, completion_percent: 0, priority: 'normal', status: 'not_started', updated_at: now };
+        task = { id: uid(), project_id: project.id, building_id: building.id, department: line.department, category: line.category, task: line.task, weight_percent: 0, completion_percent: 0, priority: 'normal', status: 'not_started', updated_at: now };
         db.project_tasks.push(task);
+      } else if (!task.task) {
+        task.task = line.task;
+        task.category = line.category;
+      } else if (!task.category) {
+        task.category = line.category;
       }
 
       const lineId = uid();
       // The line records what was reported; the activity below is the single history record of the change.
-      db.report_lines.push({ id: lineId, batch_id: batchId, department: line.department, task: line.task, project_task_id: task.id, note });
+      db.report_lines.push({ id: lineId, batch_id: batchId, department: line.department, category: line.category, task: line.task, project_task_id: task.id, note });
       db.task_activities.push({
         id: uid(), kind: 'report', report_line_id: lineId, project_task_id: task.id,
         employee_id: employee.id, employee_name: employee.name, recorded_by: caller.id,

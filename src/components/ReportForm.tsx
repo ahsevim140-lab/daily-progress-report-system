@@ -24,7 +24,9 @@ interface ReportFormProps {
   profile: Profile | null;
 }
 
-const ALWAYS_CATEGORIES = ['اجتماع', 'وضع راهن', 'تدقيق', 'عام', 'تدريب', 'أخرى'];
+// Legacy categories available across departments when no explicit visibility
+// metadata is configured. A department's own name is also a main category.
+const ALWAYS_CATEGORIES = ['اجتماع', 'وضع راهن', 'تدقيق', 'عام', 'تدريب', 'أخرى', 'تطوير'];
 const PERCENT_OPTIONS = ['100', '90', '80', '70', '60', '50', '40', '30', '20', '10', '0'];
 
 function uid() {
@@ -124,17 +126,33 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
 
   const buildingsForProject = (projectId: string) => backendData.buildings.filter((b) => b.project_id === projectId);
 
+  const categoryDepartments = (cat: typeof backendData.taskCategories[number]) => cat.departments?.length ? cat.departments : (cat.department ? [cat.department] : []);
+  const categoryVisibleForDepartment = (cat: typeof backendData.taskCategories[number], department: string) => {
+    if (!department) return false;
+    const departments = categoryDepartments(cat);
+    // Explicit visibility metadata takes precedence. This preserves the
+    // manager-controlled visibility model while retaining legacy categories
+    // when they have no metadata at all.
+    if (cat.is_general || departments.includes(department)) return true;
+    return departments.length === 0 && (ALWAYS_CATEGORIES.includes(cat.main) || cat.main === department);
+  };
+  const categoriesForDepartment = (department: string) => {
+    const visible = backendData.taskCategories.filter((cat) => categoryVisibleForDepartment(cat, department));
+    // The old app fell back to all configured categories when a department
+    // did not match a category, avoiding an empty report form after renames.
+    return visible.length > 0 ? visible : backendData.taskCategories;
+  };
   const getMainTaskOptions = (projectId: string, buildingId: string, department: string) => {
-    const allowedCategories = backendData.taskCategories.filter((cat) => Boolean(cat.is_general) || (cat.departments || (cat.department ? [cat.department] : [])).includes(department) || ALWAYS_CATEGORIES.includes(cat.main));
-    const allowedNames = new Set(allowedCategories.map((cat) => cat.main));
+    if (!department) return [];
+    const categories = categoriesForDepartment(department);
+    const allowedNames = new Set(categories.map((cat) => cat.main));
     const selectedProjectTasks = backendData.projectTasks.filter(
       (t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task && allowedNames.has(t.category || department)
     );
-    if (selectedProjectTasks.length > 0) {
-      return [...new Set(selectedProjectTasks.map((t) => t.category || department))];
-    }
-    if (!department) return [];
-    return allowedCategories.map((cat) => cat.main);
+    const configuredNames = selectedProjectTasks.map((t) => t.category || department);
+    // Project configuration narrows categories only when it has explicit
+    // category data; otherwise use the full department-aware hierarchy.
+    return configuredNames.length > 0 ? [...new Set(configuredNames)] : categories.map((cat) => cat.main);
   };
 
   const getSubtaskOptions = (projectId: string, buildingId: string, department: string, category: string) => {
@@ -143,7 +161,7 @@ export const ReportForm: React.FC<ReportFormProps> = ({ backendData, profile }) 
       .filter((t) => t.project_id === projectId && t.building_id === buildingId && t.department === department && t.task && (t.category || department) === category)
       .map((t) => t.task);
     if (selectedProjectTasks.length > 0) return [...new Set(selectedProjectTasks)];
-    const selectedCategory = backendData.taskCategories.find((cat) => cat.main === category && (cat.is_general || (cat.departments || (cat.department ? [cat.department] : [])).includes(department) || ALWAYS_CATEGORIES.includes(cat.main)));
+    const selectedCategory = categoriesForDepartment(department).find((cat) => cat.main === category);
     return selectedCategory?.subs || [];
   };
 
