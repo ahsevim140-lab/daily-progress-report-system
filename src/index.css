@@ -5,4 +5,11 @@
   .print-report { color: #1c1917; background: white; }
   .print-report section, .print-report article { break-inside: avoid; box-shadow: none !important; }
   body { background: white !important; }
+  .print-report { direction: rtl; font-family: Arial, "Noto Sans Arabic", sans-serif; }
+  .print-report table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .print-report th { background: #3b4636 !important; color: white !important; font-weight: 700; }
+  .print-report th, .print-report td { border: 1px solid #b8b1a0; padding: 6px 8px; text-align: right; vertical-align: top; }
+  .print-report h1, .print-report h2, .print-report p { margin-top: 0; }
+  .print-report .bg-white, .print-report .bg-\[\#FBF8EF\] { background: white !important; }
+  @page { size: A4; margin: 14mm; }
 }
