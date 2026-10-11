@@ -181,3 +181,31 @@ test('manager override is audited in the task history and needs a reason', async
   await login('employee', 'employee123');
   assert.match((await api.rpc('override_task_completion', { p_task_id: task.id, p_percent: 90, p_reason: 'x' })).error.message, /Manager access/);
 });
+
+test('write permissions: employee cannot insert into setup tables', async () => {
+  await login('employee', 'employee123');
+  const { error } = await api.from('departments').insert({ name: 'Forbidden dept' });
+  assert.match(error.message, /Employees may only|not permitted|create task blockers/i);
+});
+
+test('write permissions: team leader can create projects but not departments', async () => {
+  await login('leader', 'leader123');
+  const ok = await api.from('projects').insert({ name: 'TL project', status: 'draft' }).select().single();
+  assert.equal(ok.error, null);
+  assert.ok(ok.data?.id);
+  const { error } = await api.from('departments').insert({ name: 'Forbidden by TL' });
+  assert.match(error.message, /Team leaders may only|not permitted/i);
+});
+
+test('write permissions: manager can write setup tables', async () => {
+  await login('manager', 'manager123');
+  const { data, error } = await api.from('departments').insert({ name: 'New dept from manager' }).select().single();
+  assert.equal(error, null);
+  assert.ok(data?.id);
+});
+
+test('write permissions: direct insert into report_batches is blocked for everyone', async () => {
+  await login('manager', 'manager123');
+  const { error } = await api.from('report_batches').insert({ employee_name: 'x', project_id: ctx.project.id, building_id: ctx.building.id });
+  assert.match(error.message, /Direct writes to report history|not allowed/i);
+});

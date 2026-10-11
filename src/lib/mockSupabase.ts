@@ -255,6 +255,41 @@ function canReadBatch(user: Row, batch: Row): boolean {
   return false;
 }
 
+// Write scope for direct table access (the mock equivalent of RLS write policies).
+// Report history tables are only written through RPCs. Setup tables are manager-only.
+// Team leaders may create projects and task blockers; employees may create blockers and attendance.
+function assertCanWrite(table: string, op: 'insert' | 'update' | 'delete') {
+  const user = currentUser();
+  if (!user) throw new Error('Not signed in.');
+
+  // Automatic on every successful login.
+  if (table === 'login_audits') return;
+
+  // History is owned by the RPCs (submit_report, override_task_completion, review_report_batch).
+  if (['report_batches', 'report_lines', 'task_activities'].includes(table)) {
+    throw new Error('Direct writes to report history are not allowed. Use the submit_report / override RPCs.');
+  }
+
+  // Users / profiles are managed exclusively via the manage-user Edge Function.
+  if (table === 'users' || table === 'profiles') {
+    throw new Error('User accounts are managed via the manage-user function (manager only).');
+  }
+
+  if (user.role === 'manager') return;
+
+  if (user.role === 'team_leader') {
+    if (table === 'projects' && op === 'insert') return;
+    if (table === 'task_blockers' && op === 'insert') return;
+    if (table === 'attendance') return;
+    throw new Error('Team leaders may only create projects, create task blockers, and manage attendance.');
+  }
+
+  // employee
+  if (table === 'task_blockers' && op === 'insert') return;
+  if (table === 'attendance') return;
+  throw new Error('Employees may only create task blockers and manage attendance.');
+}
+
 // Reset helper exposed on window so it's easy to get back to a clean slate
 // while testing, without digging through devtools.
 (window as any).__resetOfflineData = () => {
@@ -403,6 +438,7 @@ class MockQueryBuilder {
     }
 
     if (this.op === 'insert') {
+      assertCanWrite(this.table as string, 'insert');
       const items = (Array.isArray(this.payload) ? this.payload : [this.payload]).map((item) => ({
         id: uid(),
         ...item,
@@ -421,6 +457,7 @@ class MockQueryBuilder {
     }
 
     if (this.op === 'update') {
+      assertCanWrite(this.table as string, 'update');
       const rows = (db[sourceTable] as Row[]).filter((r) => this.matches(r));
       rows.forEach((r) => Object.assign(r, this.payload));
       if (this.table === 'areas') rows.forEach((item) => { const building = db.buildings.find((row) => row.id === item.building_id); if (building) recalculateBuildingWeights(building.project_id); });
@@ -429,6 +466,7 @@ class MockQueryBuilder {
     }
 
     if (this.op === 'delete') {
+      assertCanWrite(this.table as string, 'delete');
       const removed = (db[sourceTable] as Row[]).filter((r) => this.matches(r));
       const kept = (db[sourceTable] as Row[]).filter((r) => !this.matches(r));
       const removedCount = (db[sourceTable] as Row[]).length - kept.length;

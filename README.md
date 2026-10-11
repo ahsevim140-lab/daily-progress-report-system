@@ -44,6 +44,10 @@ Reset local data from the browser console with `window.__resetOfflineData()`.
 - **Manager override** (`override_task_completion`) is manager-only, needs a reason, and is recorded as an `override` activity. No screen calls it yet.
 - **Reads**: reports are visible to the manager (all), a team leader (own team, own projects, own
   reports) and an employee (own). `manage-user` is manager-only, as in the real Edge Function.
+- **Writes**: direct table writes are role-scoped. Managers can write setup tables. Team leaders may
+  create projects and task blockers (and manage attendance). Employees may create task blockers and
+  manage attendance. Report history tables (`report_batches`, `report_lines`, `task_activities`)
+  are only written via RPCs. User accounts are only managed via the `manage-user` function.
 
 ## Not done yet (deliberately deferred)
 
@@ -52,7 +56,6 @@ Reset local data from the browser console with `window.__resetOfflineData()`.
   `security definer` trusting the caller). The new `submit_report` / `override_task_completion`
   contracts and RLS need writing before switching the flag. Note the GitHub Pages workflow builds
   without `VITE_OFFLINE_MODE=false`, so the deployed site is the offline model.
-- Write permissions in the mock are still open to any signed-in user (only reads and `manage-user` are scoped).
 - Team-leader project scope is "projects I created", not "projects I lead".
 - A report back-dated before a newer report for the same task still overwrites the task's current percentage.
 - Project weights are only warned about, not required to total 100% before a project runs.
